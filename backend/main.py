@@ -13,7 +13,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sse_starlette.sse import EventSourceResponse
 
 from engine.pipeline import Pipeline
@@ -105,9 +105,7 @@ async def get_alerts():
 async def get_status():
     """Return the last known pipeline update."""
     if pipeline.last_update is None:
-        return JSONResponse(
-            content={"detail": "No data yet"}, status_code=204
-        )
+        return Response(status_code=204)
     return pipeline.last_update
 
 

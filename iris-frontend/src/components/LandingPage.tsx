@@ -124,7 +124,7 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
   useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
 
   return (
-    <div className="min-h-screen bg-navy-950 flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-navy-950 flex flex-col relative overflow-x-hidden">
       {/* ── Background Effects (multi-layer) ───────────── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <ParticleField />
@@ -158,6 +158,7 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-6 text-[11px] font-semibold text-slate-400 tracking-wide uppercase">
+          <button onClick={() => document.getElementById('section-hazards')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Modules</button>
           <button onClick={() => document.getElementById('section-features')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Features</button>
           <button onClick={() => document.getElementById('section-pipeline')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Pipeline</button>
           <button onClick={() => document.getElementById('section-about')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">About</button>
@@ -168,7 +169,7 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
       <main className="relative z-10 flex-1 flex flex-col items-center px-6 sm:px-10 lg:px-16">
 
         {/* Hero Content */}
-        <div className={`max-w-4xl w-full text-center pt-14 sm:pt-20 lg:pt-24 pb-16 sm:pb-24 transition-all duration-1000 ease-out ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+        <div className={`max-w-4xl w-full text-center pt-14 sm:pt-16 lg:pt-20 pb-10 sm:pb-14 transition-all duration-1000 ease-out ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
           {/* Tagline Pill */}
           <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/[0.1] to-violet-500/[0.05] border border-blue-500/20 rounded-full px-6 py-2.5 mb-10 sm:mb-12 backdrop-blur-sm">
             <div className="relative">
@@ -179,7 +180,7 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
           </div>
 
           {/* Main Headline */}
-          <h1 className={`text-[2.75rem] sm:text-[3.75rem] lg:text-[4.5rem] font-black text-white leading-[1.05] tracking-[-0.03em] mb-7 sm:mb-8 transition-all duration-1000 delay-200 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+          <h1 className={`text-[2.75rem] sm:text-[3.75rem] lg:text-[4.5rem] font-black text-white leading-[1.05] tracking-[-0.03em] mb-5 sm:mb-6 transition-all duration-1000 delay-200 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
             Infrastructure Risk
             <br />
             <span className="text-gradient-iris relative">
@@ -192,13 +193,13 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
           </h1>
 
           {/* Subheadline */}
-          <p className={`text-sm sm:text-[17px] lg:text-lg text-slate-400 max-w-[580px] mx-auto leading-[1.8] mb-12 sm:mb-14 transition-all duration-1000 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-            A multi-agent emergency decision system that transforms live sensor
-            and edge-camera events into actionable safety responses — <span className="text-white font-semibold">in under 2&nbsp;seconds</span>.
+          <p className={`text-sm sm:text-[17px] lg:text-lg text-slate-400 max-w-[620px] mx-auto leading-[1.8] mb-8 sm:mb-10 transition-all duration-1000 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            A modular infrastructure risk intelligence platform that transforms
+            live sensor and vision inputs into actionable safety responses — <span className="text-white font-semibold">in under 2&nbsp;seconds</span>.
           </p>
 
-          {/* CTA Buttons */}
-          <div className={`flex flex-col sm:flex-row items-center justify-center gap-4 transition-all duration-1000 delay-500 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+          {/* CTA Button */}
+          <div className={`flex items-center justify-center transition-all duration-1000 delay-500 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
             <button
               onClick={onEnter}
               className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-blue-500 to-blue-400 text-white px-10 sm:px-14 py-4 sm:py-[18px] rounded-2xl text-sm sm:text-[15px] font-extrabold tracking-wide shadow-2xl shadow-blue-500/30 hover:shadow-blue-400/50 hover:translate-y-[-2px] active:translate-y-0 transition-all duration-300 cursor-pointer ring-1 ring-blue-400/30 overflow-hidden"
@@ -209,18 +210,133 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </button>
-            {onDamageScan && (
-              <button
-                onClick={onDamageScan}
-                className="group relative inline-flex items-center gap-3 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 px-8 sm:px-10 py-4 sm:py-[18px] rounded-2xl text-sm sm:text-[15px] font-extrabold tracking-wide border border-violet-500/25 hover:border-violet-400/40 hover:translate-y-[-2px] active:translate-y-0 transition-all duration-300 cursor-pointer overflow-hidden"
-              >
-                <svg className="relative w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.04 12.32a1.01 1.01 0 010-.64C3.42 7.51 7.36 4.5 12 4.5c4.64 0 8.57 3.01 9.96 7.18.07.21.07.43 0 .64C20.58 16.49 16.64 19.5 12 19.5c-4.64 0-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="relative">Damage Scan</span>
-              </button>
-            )}
           </div>
+        </div>
+
+        {/* ── Multi-Hazard Monitoring Section ──────────── */}
+        <div id="section-hazards" className={`max-w-5xl w-full mb-16 sm:mb-20 scroll-mt-20 transition-all duration-1000 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+          <div className="text-center mb-8 sm:mb-10">
+            <div className="inline-flex items-center gap-2 bg-blue-500/[0.06] border border-blue-500/15 rounded-full px-4 py-1.5 mb-4">
+              <div className="w-1 h-1 rounded-full bg-blue-400" />
+              <span className="text-[8px] font-bold text-blue-400/80 uppercase tracking-[0.25em]">Platform</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Multi-Hazard Monitoring Platform
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-3 max-w-xl mx-auto leading-relaxed">
+              IRIS ingests structural, seismic, environmental, and vision-based risk signals — transforming them into unified, actionable safety decisions.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+            {/* Card 1 — Structural Monitoring */}
+            <div className="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.06] to-navy-900/60 shadow-lg shadow-blue-500/[0.04] hover:border-blue-500/35 hover:shadow-xl hover:shadow-blue-500/[0.1] hover:translate-y-[-4px] transition-all duration-500 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-30 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="relative p-6 sm:p-7">
+                <div className="flex items-start justify-between mb-5">
+                  <div className="w-11 h-11 rounded-xl bg-blue-500/[0.08] border border-blue-500/15 flex items-center justify-center text-blue-400 group-hover:bg-blue-500/15 group-hover:shadow-lg group-hover:shadow-blue-500/10 transition-all duration-500">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5M3.75 21V3.75a.75.75 0 01.75-.75h6a.75.75 0 01.75.75V21M3.75 21h7.5M13.5 21V10.5a.75.75 0 01.75-.75h5.25a.75.75 0 01.75.75V21M13.5 21h7.5" />
+                    </svg>
+                  </div>
+                  <span className="text-[8px] font-black tracking-[0.15em] px-2.5 py-1 rounded-lg border bg-blue-500/10 border-blue-500/20 text-blue-400">LIVE</span>
+                </div>
+                <h3 className="text-[14px] font-bold text-white mb-2.5 leading-snug">Structural Monitoring</h3>
+                <p className="text-[11px] text-slate-500 leading-[1.75] mb-6">
+                  Live stress, vibration, load, and environmental sensor analysis with rule-based emergency escalation.
+                </p>
+                <button
+                  onClick={onEnter}
+                  className="group/btn inline-flex items-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 px-5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide border border-blue-500/20 hover:border-blue-400/35 transition-all duration-300 cursor-pointer"
+                >
+                  Open Live Dashboard
+                  <svg className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2 — Vision Damage Assessment */}
+            <div className="group relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] to-navy-900/60 shadow-lg shadow-violet-500/[0.04] hover:border-violet-500/35 hover:shadow-xl hover:shadow-violet-500/[0.1] hover:translate-y-[-4px] transition-all duration-500 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent opacity-30 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="relative p-6 sm:p-7">
+                <div className="flex items-start justify-between mb-5">
+                  <div className="w-11 h-11 rounded-xl bg-violet-500/[0.08] border border-violet-500/15 flex items-center justify-center text-violet-400 group-hover:bg-violet-500/15 group-hover:shadow-lg group-hover:shadow-violet-500/10 transition-all duration-500">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.04 12.32a1.01 1.01 0 010-.64C3.42 7.51 7.36 4.5 12 4.5c4.64 0 8.57 3.01 9.96 7.18.07.21.07.43 0 .64C20.58 16.49 16.64 19.5 12 19.5c-4.64 0-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <span className="text-[8px] font-black tracking-[0.15em] px-2.5 py-1 rounded-lg border bg-violet-500/10 border-violet-500/20 text-violet-400">AI</span>
+                </div>
+                <h3 className="text-[14px] font-bold text-white mb-2.5 leading-snug">Vision Damage Assessment</h3>
+                <p className="text-[11px] text-slate-500 leading-[1.75] mb-6">
+                  Upload structural images to detect crack patterns and inject visual risk signals into IRIS.
+                </p>
+                {onDamageScan ? (
+                  <button
+                    onClick={onDamageScan}
+                    className="group/btn inline-flex items-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 px-5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide border border-violet-500/20 hover:border-violet-400/35 transition-all duration-300 cursor-pointer"
+                  >
+                    Open Damage Scan
+                    <svg className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={onEnter}
+                    className="group/btn inline-flex items-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 px-5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide border border-violet-500/20 hover:border-violet-400/35 transition-all duration-300 cursor-pointer"
+                  >
+                    Open Damage Scan
+                    <svg className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Card 3 — Seismic & Flood Monitoring (Coming Soon) */}
+            <div className="group relative overflow-hidden rounded-2xl border border-slate-700/30 bg-gradient-to-br from-slate-500/[0.03] to-navy-900/60 opacity-60 transition-all duration-500 backdrop-blur-sm">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-500/5 to-transparent" />
+              {/* Diagonal "Coming Soon" ribbon */}
+              <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none">
+                <div className="absolute top-[14px] right-[-32px] w-[140px] text-center rotate-45 bg-emerald-500/20 border-y border-emerald-500/25 py-[3px]">
+                  <span className="text-[7px] font-black text-emerald-400/80 uppercase tracking-[0.15em]">Coming Soon</span>
+                </div>
+              </div>
+              <div className="relative p-6 sm:p-7">
+                <div className="flex items-start justify-between mb-5">
+                  <div className="w-11 h-11 rounded-xl bg-slate-500/[0.06] border border-slate-500/15 flex items-center justify-center text-slate-500 transition-all duration-500">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2 12c1.5-3 3-4 4.5-1s3 3 4.5 0 3-4 4.5-1 3 3 4.5 0" />
+                    </svg>
+                  </div>
+                  <span className="text-[8px] font-black tracking-[0.15em] px-2.5 py-1 rounded-lg border bg-slate-500/10 border-slate-500/20 text-slate-500">SOON</span>
+                </div>
+                <h3 className="text-[14px] font-bold text-slate-400 mb-2.5 leading-snug">Seismic &amp; Flood Monitoring</h3>
+                <p className="text-[11px] text-slate-600 leading-[1.75] mb-6">
+                  Ingest earthquake acceleration and water-level data to evaluate environmental risk in real time.
+                </p>
+                <button
+                  disabled
+                  className="inline-flex items-center gap-2 bg-slate-500/5 text-slate-600 px-5 py-2.5 rounded-xl text-[11px] font-bold tracking-wide border border-slate-500/10 cursor-not-allowed"
+                >
+                  Coming Soon
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Gradient Divider ─────────────────────────── */}
+        <div className="w-full max-w-5xl mb-20 sm:mb-28">
+          <div className="h-px bg-gradient-to-r from-transparent via-blue-500/15 to-transparent" />
         </div>
 
         {/* ── Animated Metrics Strip ───────────────────── */}
