@@ -24,3 +24,6 @@ dist/
 Thumbs.db
 
 iris-frontend/.vite/
+
+*.pt
+yolov8n.pt
