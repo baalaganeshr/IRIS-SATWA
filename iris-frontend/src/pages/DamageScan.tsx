@@ -55,7 +55,7 @@ interface DamageScanProps {
   onNavigate?: (page: string) => void;
 }
 
-export default function DamageScan({ onNavigate }: DamageScanProps) {
+export default function DamageScan(_props: DamageScanProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -164,7 +164,7 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* ── Left: Upload & Preview ───────────────────── */}
-        <div className="lg:col-span-5 space-y-5">
+        <div className="lg:col-span-5 space-y-4">
           {/* Upload zone */}
           <div className="navy-card p-6 animate-fade-in-up">
             <h3 className="section-title mb-4">
@@ -242,13 +242,13 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
                 </svg>
                 Original Image
               </h3>
-              <img src={preview} alt="Upload preview" className="w-full rounded-lg border border-navy-700/50 object-contain max-h-[250px] bg-navy-950" />
+              <img src={preview} alt="Upload preview" className="w-full rounded-lg border border-navy-700/50 object-contain max-h-[220px] bg-navy-950" />
             </div>
           )}
         </div>
 
         {/* ── Right: Results ───────────────────────────── */}
-        <div className="lg:col-span-7 space-y-5">
+        <div className="lg:col-span-7 space-y-4">
           {/* Analysis result */}
           {result ? (
             <>
@@ -304,11 +304,11 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
                 </div>
 
                 {/* Inject button */}
-                <div className="mt-5 flex gap-3">
+                <div className="mt-5">
                   <button
                     onClick={handleInject}
                     disabled={injecting}
-                    className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600/20 to-violet-500/10 hover:from-violet-600/30 hover:to-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 font-bold text-xs py-3 rounded-xl transition-all border border-violet-500/25 cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600/20 to-violet-500/10 hover:from-violet-600/30 hover:to-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 font-bold text-xs py-3 rounded-xl transition-all border border-violet-500/25 cursor-pointer"
                   >
                     {injecting ? (
                       <div className="w-3.5 h-3.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
@@ -319,20 +319,12 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
                     )}
                     {injecting ? "Injecting..." : "Inject into IRIS Pipeline"}
                   </button>
-                  {onNavigate && (
-                    <button
-                      onClick={() => onNavigate("overview")}
-                      className="px-5 text-xs font-semibold text-slate-500 hover:text-cyan-400 transition-colors cursor-pointer"
-                    >
-                      Go to Dashboard
-                    </button>
-                  )}
                 </div>
               </div>
 
               {/* Overlay preview */}
               {result.overlay_image_base64 && (
-                <div className="navy-card p-5 animate-fade-in-up" style={{ animationDelay: "150ms" }}>
+                <div className="navy-card p-4 animate-fade-in-up" style={{ animationDelay: "150ms" }}>
                   <h3 className="section-title mb-3">
                     <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
@@ -342,7 +334,7 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
                   <img
                     src={`data:image/png;base64,${result.overlay_image_base64}`}
                     alt="Damage overlay"
-                    className="w-full rounded-lg border border-red-500/20 object-contain max-h-[300px] bg-navy-950"
+                    className="w-full rounded-lg border border-red-500/20 object-contain max-h-[220px] bg-navy-950"
                   />
                   <p className="text-[10px] text-slate-600 mt-2 text-center">Red regions indicate detected edge density (potential cracks)</p>
                 </div>
@@ -360,9 +352,11 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
               <p className="text-xs text-slate-600 text-center max-w-xs">Upload a structural image and click "Analyze" to detect surface damage using edge-density AI.</p>
             </div>
           )}
+        </div>
+      </div>
 
-          {/* ── Injection Result — Full Damage Assessment Report ── */}
-          {injectResult && (() => {
+      {/* ── Injection Result — Full Damage Assessment Report ── */}
+      {injectResult && (() => {
             const va = injectResult.vision_assessment;
             const sevColors: Record<string, { text: string; bg: string; border: string; bar: string; glow: string }> = {
               CRITICAL: { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/30", bar: "bg-red-500", glow: "shadow-red-500/20" },
@@ -560,35 +554,35 @@ export default function DamageScan({ onNavigate }: DamageScanProps) {
                     )}
                   </div>
 
-                  {/* ── Navigation buttons ── */}
-                  {onNavigate && (
-                    <div className="flex gap-3 pt-1">
-                      <button
-                        onClick={() => onNavigate("overview")}
-                        className="flex-1 flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 font-bold text-xs py-2.5 rounded-lg transition-all border border-cyan-500/20 cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
-                        </svg>
-                        View Live Dashboard
-                      </button>
-                      <button
-                        onClick={() => onNavigate("stakeholders")}
-                        className="flex-1 flex items-center justify-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 font-bold text-xs py-2.5 rounded-lg transition-all border border-violet-500/20 cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                        Export Report
-                      </button>
-                    </div>
-                  )}
+
                 </div>
               </div>
             );
           })()}
+
+      {/* ── Full-width Image Comparison (below report) ── */}
+      {injectResult && preview && result?.overlay_image_base64 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: "250ms" }}>
+          <div className="navy-card p-4">
+            <h3 className="section-title mb-2">
+              <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.41a2.25 2.25 0 013.182 0l2.909 2.91" />
+              </svg>
+              Original
+            </h3>
+            <img src={preview} alt="Original" className="w-full rounded-lg border border-navy-700/50 object-contain max-h-[200px] bg-navy-950" />
+          </div>
+          <div className="navy-card p-4">
+            <h3 className="section-title mb-2">
+              <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+              </svg>
+              Processed
+            </h3>
+            <img src={`data:image/png;base64,${result.overlay_image_base64}`} alt="Overlay" className="w-full rounded-lg border border-red-500/20 object-contain max-h-[200px] bg-navy-950" />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
