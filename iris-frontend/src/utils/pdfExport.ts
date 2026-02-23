@@ -6,7 +6,7 @@ import autoTable from "jspdf-autotable";
 const COLORS = {
   bg: [4, 8, 17] as [number, number, number],
   card: [17, 24, 39] as [number, number, number],
-  cyan: [6, 182, 212] as [number, number, number],
+  cyan: [59, 130, 246] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
   slate300: [203, 213, 225] as [number, number, number],
   slate400: [148, 163, 184] as [number, number, number],

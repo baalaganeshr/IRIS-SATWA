@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentLog, Alert, Decision, RiskAssessment } from "./types/schemas";
 import type { ConnectionStatus } from "./api/sse";
-import { fetchAlerts, fetchAgentLogs, startScenario } from "./api/client";
+import { fetchAlerts, fetchAgentLogs, fetchStatus, startScenario } from "./api/client";
 import { createSSEConnection } from "./api/sse";
+import { useSmoothScroll } from "./hooks/useLenis";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import LandingPage from "./components/LandingPage";
@@ -13,6 +14,7 @@ import BridgeMap from "./pages/BridgeMap";
 import AnalyticsHub from "./pages/AnalyticsHub";
 import Stakeholders from "./pages/Stakeholders";
 import Settings from "./pages/Settings";
+import DamageScan from "./pages/DamageScan";
 
 const MAX_ALERTS = 50;
 const MAX_AGENT_LOGS = 100;
@@ -34,9 +36,45 @@ function App() {
   const scenarioTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLevel = useRef<string | null>(null);
   const seenLogIds = useRef<Set<string>>(new Set());
+  const mainRef = useRef<HTMLElement>(null);
+  const scrollToTop = useSmoothScroll(mainRef);
+
+  // ── Navigate handler: reset scroll instantly BEFORE React re-render ─
+  const handleNavigate = useCallback((page: string) => {
+    scrollToTop();
+    setCurrentPage(page);
+  }, [scrollToTop]);
+
+  // Safety net: also reset after React commits the new page
+  useEffect(() => {
+    scrollToTop();
+  }, [currentPage, scrollToTop]);
+
+  // Reset scroll when entering dashboard from landing page
+  useEffect(() => {
+    if (entered) {
+      // Use rAF to ensure <main> is mounted before resetting scroll
+      requestAnimationFrame(() => {
+        if (mainRef.current) {
+          mainRef.current.scrollTop = 0;
+        }
+      });
+    }
+  }, [entered]);
 
   // ── SSE + initial data ──────────────────────────────────────────────
   useEffect(() => {
+    // Hydrate from last-known state (bridge until SSE connects)
+    fetchStatus().then((update) => {
+      if (update) {
+        setRisk(update.risk);
+        setDecision(update.decision);
+        if (update.alert) {
+          setAlerts((prev) => [update.alert!, ...prev].slice(0, MAX_ALERTS));
+        }
+      }
+    });
+
     fetchAlerts().then((existing) => {
       if (existing.length) setAlerts(existing);
     });
@@ -71,7 +109,25 @@ function App() {
       (status) => setConnection(status)
     );
 
-    return disconnect;
+    // Fallback poll: if SSE drops, keep cards alive by polling status
+    const pollId = setInterval(async () => {
+      const update = await fetchStatus();
+      if (update) {
+        setRisk(update.risk);
+        setDecision(update.decision);
+        if (update.alert) {
+          setAlerts((prev) => {
+            if (prev[0]?.timestamp === update.alert!.timestamp) return prev;
+            return [update.alert!, ...prev].slice(0, MAX_ALERTS);
+          });
+        }
+      }
+    }, 4000);
+
+    return () => {
+      disconnect();
+      clearInterval(pollId);
+    };
   }, []);
 
   // ── RED Alert effects ───────────────────────────────────────────────
@@ -192,7 +248,7 @@ function App() {
 
   // ── Landing Page Gate ───────────────────────────────────────────────
   if (!entered) {
-    return <LandingPage onEnter={() => setEntered(true)} />;
+    return <LandingPage onEnter={() => setEntered(true)} onDamageScan={() => { setEntered(true); handleNavigate("damage-scan"); }} />;
   }
 
   // ── Page Router ─────────────────────────────────────────────────────
@@ -239,6 +295,12 @@ function App() {
             <Settings />
           </ErrorBoundary>
         );
+      case "damage-scan":
+        return (
+          <ErrorBoundary fallbackTitle="Damage Scan failed to load">
+            <DamageScan onNavigate={handleNavigate} />
+          </ErrorBoundary>
+        );
       default:
         return (
           <ErrorBoundary fallbackTitle="Dashboard failed to load">
@@ -275,13 +337,13 @@ function App() {
       {/* Sidebar Navigation */}
       <Sidebar
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={handleNavigate}
         onAboutOpen={() => setAboutOpen(true)}
-        onExit={() => { setEntered(false); setCurrentPage("overview"); }}
+        onExit={() => { setEntered(false); handleNavigate("overview"); }}
       />
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <Header
           riskLevel={risk?.risk_level ?? null}
           connection={connection}
@@ -304,7 +366,7 @@ function App() {
         )}
 
         {/* Main scrollable content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-navy-950 p-4 lg:p-6 pb-20 md:pb-6">
+        <main ref={mainRef} className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto bg-navy-950 p-4 lg:p-6 pb-20 md:pb-6" style={{ scrollBehavior: 'auto' }}>
           <div className="max-w-[1520px] mx-auto">
             {renderPage()}
           </div>

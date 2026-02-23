@@ -11,14 +11,16 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from engine.pipeline import Pipeline
 from models.schemas import SensorReading, SSEUpdate
+from pydantic import BaseModel, Field
 from simulator.scenarios import ScenarioRunner
+from vision import analyze_image
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(name)-20s  %(message)s")
@@ -129,6 +131,42 @@ async def start_scenario(name: str):
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {"status": "started", "scenario": name}
+
+
+# ── Vision / Damage-Scan endpoints ──────────────────────────────────────────
+
+@app.post("/api/vision/analyze")
+async def vision_analyze(image: UploadFile = File(...)):
+    """Analyze an uploaded image for structural damage (cracks)."""
+    if image.content_type not in ("image/jpeg", "image/png", "image/jpg"):
+        raise HTTPException(status_code=400, detail="Only JPEG/PNG images accepted")
+    contents = await image.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 10 MB)")
+    result = analyze_image(contents)
+    return result
+
+
+class VisionInjectPayload(BaseModel):
+    crack_confidence: float = Field(ge=0.0, le=1.0)
+
+
+@app.post("/api/vision/inject")
+async def vision_inject(payload: VisionInjectPayload):
+    """Convert crack-confidence into a synthetic sensor reading and push through the pipeline."""
+    from datetime import datetime as _dt
+
+    reading = SensorReading(
+        timestamp=_dt.utcnow().isoformat(),
+        sensor_id="VISION-CAM-01",
+        sensor_type="STRESS",
+        value=payload.crack_confidence * 100,   # map 0..1 → 0..100 stress %
+        unit="%",
+        bridge_section="main_span",
+    )
+    update = pipeline.process([reading])
+    await _broadcast(update)
+    return update
 
 
 @app.get("/api/stream")

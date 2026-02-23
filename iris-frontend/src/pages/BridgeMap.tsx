@@ -581,14 +581,14 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
               <svg className="absolute inset-0 w-full h-full opacity-40 pointer-events-none" viewBox="0 0 1000 500" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="river-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.15" />
-                    <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.15" />
+                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.15" />
+                    <stop offset="50%" stopColor="#2563eb" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.15" />
                   </linearGradient>
                 </defs>
                 {/* River path */}
                 <path d="M 0 200 Q 150 180, 250 210 Q 400 250, 500 220 Q 650 180, 750 200 Q 900 230, 1000 210" fill="none" stroke="url(#river-grad)" strokeWidth="50" strokeLinecap="round" />
-                <path d="M 0 200 Q 150 180, 250 210 Q 400 250, 500 220 Q 650 180, 750 200 Q 900 230, 1000 210" fill="none" stroke="#22d3ee" strokeWidth="1" strokeLinecap="round" opacity="0.3" />
+                <path d="M 0 200 Q 150 180, 250 210 Q 400 250, 500 220 Q 650 180, 750 200 Q 900 230, 1000 210" fill="none" stroke="#60a5fa" strokeWidth="1" strokeLinecap="round" opacity="0.3" />
               </svg>
 
               {/* Major Roads */}

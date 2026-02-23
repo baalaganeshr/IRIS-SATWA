@@ -46,6 +46,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: "Damage Scan",
+    page: "damage-scan",
+    icon: (
+      <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.04 12.32a1.01 1.01 0 010-.64C3.42 7.51 7.36 4.5 12 4.5c4.64 0 8.57 3.01 9.96 7.18.07.21.07.43 0 .64C20.58 16.49 16.64 19.5 12 19.5c-4.64 0-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
     label: "Settings",
     page: "settings",
     icon: (
@@ -69,7 +78,7 @@ export default function Sidebar({ currentPage, onNavigate, onAboutOpen, onExit }
           className="flex items-center gap-3 group cursor-pointer"
           title="Back to Home"
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-magenta-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0 group-hover:shadow-cyan-500/40 transition-shadow">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0 group-hover:shadow-cyan-500/40 transition-shadow">
             <span className="text-white font-black text-xs leading-none">IR</span>
           </div>
           <div>
@@ -144,7 +153,7 @@ export default function Sidebar({ currentPage, onNavigate, onAboutOpen, onExit }
     {/* ── Mobile Bottom Tab Bar ───────────────────────── */}
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-navy-900/95 backdrop-blur-md border-t border-navy-700/50 safe-area-bottom">
       <div className="flex items-center justify-around h-14">
-        {NAV_ITEMS.slice(0, 5).map((item) => {
+        {NAV_ITEMS.slice(0, 6).map((item) => {
           const isActive = currentPage === item.page;
           return (
             <button

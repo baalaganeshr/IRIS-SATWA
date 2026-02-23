@@ -1,274 +1,317 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+
+/* ── Animated Counter Hook ────────────────────────────────────────── */
+function useCounter(end: number, duration = 1800, delay = 0) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      let start = 0;
+      const step = Math.max(1, Math.floor(end / (duration / 16)));
+      const id = setInterval(() => {
+        start += step;
+        if (start >= end) { setCount(end); clearInterval(id); }
+        else setCount(start);
+      }, 16);
+      return () => clearInterval(id);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [end, duration, delay]);
+  return count;
+}
+
+/* ── Live Particle Canvas ─────────────────────────────────────────── */
+function ParticleField() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let raf: number;
+    const dpr = window.devicePixelRatio || 1;
+    const resize = () => { canvas.width = canvas.offsetWidth * dpr; canvas.height = canvas.offsetHeight * dpr; ctx.scale(dpr, dpr); };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const particles: { x: number; y: number; vx: number; vy: number; r: number; o: number }[] = [];
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: Math.random() * canvas.offsetWidth,
+        y: Math.random() * canvas.offsetHeight,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        o: Math.random() * 0.4 + 0.1,
+      });
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+      for (const p of particles) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x = canvas.offsetWidth;
+        if (p.x > canvas.offsetWidth) p.x = 0;
+        if (p.y < 0) p.y = canvas.offsetHeight;
+        if (p.y > canvas.offsetHeight) p.y = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(96, 165, 250, ${p.o})`;
+        ctx.fill();
+      }
+      // draw connections
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(96, 165, 250, ${0.06 * (1 - dist / 120)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
+}
 
 /* ── Metrics Strip ────────────────────────────────────────────────── */
-
 const METRICS = [
-  {
-    value: "4",
-    label: "Modular Agents",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5" />
-      </svg>
-    ),
-  },
-  {
-    value: "24/7",
-    label: "Continuous Monitoring",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    value: "<2s",
-    label: "Decision Response",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-      </svg>
-    ),
-  },
-  {
-    value: "100+",
-    label: "Sensor & Event Inputs",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546" />
-      </svg>
-    ),
-  },
+  { value: 4, suffix: "", label: "AI Agents", icon: "M9.75 3.1v5.71a2.25 2.25 0 01-.66 1.59L5 14.5M9.75 3.1c-.25.02-.5.05-.75.08m.75-.08a24.3 24.3 0 014.5 0m0 0v5.71c0 .6.24 1.17.66 1.59L19.8 15.3M14.25 3.1c.25.02.5.05.75.08M19.8 15.3l-1.57.39A9.07 9.07 0 0112 15a9.07 9.07 0 00-6.23.69L5 14.5" },
+  { value: 24, suffix: "/7", label: "Always On", icon: "M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { value: 2, suffix: "s", prefix: "<", label: "Response Time", icon: "M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" },
+  { value: 100, suffix: "+", label: "Sensor Inputs", icon: "M9.35 14.65a3.75 3.75 0 010-5.3m5.3 0a3.75 3.75 0 010 5.3m-7.42 2.12a6.75 6.75 0 010-9.55m9.55 0a6.75 6.75 0 010 9.55" },
 ];
 
 /* ── How It Works ─────────────────────────────────────────────────── */
-
 const WORKFLOW = [
-  {
-    step: "01",
-    title: "Ingest",
-    desc: "Live structural sensors and edge-camera detection events stream into IRIS via real-time channels.",
-    color: "from-cyan-500/20 to-cyan-600/5",
-    accent: "text-cyan-400",
-  },
-  {
-    step: "02",
-    title: "Analyze",
-    desc: "Specialized agents evaluate stress, vibration, load, and environmental conditions using weighted risk logic.",
-    color: "from-blue-500/20 to-blue-600/5",
-    accent: "text-blue-400",
-  },
-  {
-    step: "03",
-    title: "Decide",
-    desc: "An explainable decision engine escalates conditions through MONITOR → WARN → RESTRICT → EVACUATE.",
-    color: "from-violet-500/20 to-violet-600/5",
-    accent: "text-violet-400",
-  },
-  {
-    step: "04",
-    title: "Alert",
-    desc: "Critical risk states trigger instant alerts and coordinated emergency actions.",
-    color: "from-emerald-500/20 to-emerald-600/5",
-    accent: "text-emerald-400",
-  },
+  { step: "01", title: "Ingest", desc: "Real-time sensor streams and edge-camera events flow into IRIS continuously.", color: "from-blue-500/20 to-blue-600/5", accent: "text-blue-400", icon: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" },
+  { step: "02", title: "Analyze", desc: "Specialized agents evaluate stress, vibration, load, and environmental factors.", color: "from-violet-500/20 to-violet-600/5", accent: "text-violet-400", icon: "M9.75 3.1v5.71a2.25 2.25 0 01-.66 1.59L5 14.5m4.75-11.4c-.25.02-.5.05-.75.08m.75-.08a24.3 24.3 0 014.5 0" },
+  { step: "03", title: "Decide", desc: "Explainable engine escalates: MONITOR → WARN → RESTRICT → EVACUATE.", color: "from-amber-500/20 to-amber-600/5", accent: "text-amber-400", icon: "M12 9v3.75m0-10.04A11.96 11.96 0 013.6 6 12 12 0 003 9.75c0 5.59 3.82 10.29 9 11.62 5.18-1.33 9-6.03 9-11.62 0-1.31-.21-2.57-.6-3.75" },
+  { step: "04", title: "Alert", desc: "Critical risk states trigger instant alerts and coordinated emergency response.", color: "from-red-500/20 to-red-600/5", accent: "text-red-400", icon: "M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" },
 ];
 
 /* ── Feature Grid ─────────────────────────────────────────────────── */
-
 const FEATURES = [
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304 0a3.75 3.75 0 010 5.303m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.788m13.788 0c3.808 3.808 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm0 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-      </svg>
-    ),
-    title: "Real-Time Sensor Integration",
-    desc: "SSE data streams from strain gauges, accelerometers, traffic load sensors, and environmental monitors.",
-    gradient: "from-cyan-500/10 to-transparent",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    title: "Edge AI Event Integration",
-    desc: "Computer vision modules running at the edge detect anomalies (e.g., cracks, abnormal tilt) and send structured alerts to IRIS.",
-    gradient: "from-blue-500/10 to-transparent",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-      </svg>
-    ),
-    title: "Multi-Agent Decision Pipeline",
-    desc: "Ingestion → Risk Scoring → Decision Logic → Alert Dispatch. Modular, explainable, and reliable for safety-critical systems.",
-    gradient: "from-violet-500/10 to-transparent",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.249-8.25-3.286zm0 13.036h.008v.008H12v-.008z" />
-      </svg>
-    ),
-    title: "Smart Escalation Protocol",
-    desc: "Automatic, deterministic escalation ensures rapid response without black-box uncertainty.",
-    gradient: "from-amber-500/10 to-transparent",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-      </svg>
-    ),
-    title: "Live Operations Dashboard",
-    desc: "Visualize risk scores, contributing factors, and recommended actions in real time.",
-    gradient: "from-emerald-500/10 to-transparent",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
-    ),
-    title: "Instant Incident Reports",
-    desc: "Generate structured incident summaries for authorities and stakeholders.",
-    gradient: "from-rose-500/10 to-transparent",
-  },
+  { icon: "M9.35 14.65a3.75 3.75 0 010-5.3m5.3 0a3.75 3.75 0 010 5.3m-7.42 2.12a6.75 6.75 0 010-9.55m9.55 0a6.75 6.75 0 010 9.55M5.11 18.89c-3.81-3.81-3.81-9.98 0-13.79m13.79 0c3.81 3.81 3.81 9.98 0 13.79M12 12h.01v.01H12V12z", title: "Real-Time Sensors", desc: "SSE streams from strain gauges, accelerometers, and traffic load sensors.", gradient: "from-blue-500/10 to-transparent", tag: "LIVE" },
+  { icon: "M2.04 12.32a1.01 1.01 0 010-.64C3.42 7.51 7.36 4.5 12 4.5c4.64 0 8.57 3.01 9.96 7.18.07.21.07.43 0 .64C20.58 16.49 16.64 19.5 12 19.5c-4.64 0-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z", title: "Edge AI Vision", desc: "Computer vision at the edge detects cracks, tilt, and structural anomalies.", gradient: "from-violet-500/10 to-transparent", tag: "AI" },
+  { icon: "M9.75 3.1v5.71a2.25 2.25 0 01-.66 1.59L5 14.5m14.8.8l1.4 1.4c1.23 1.23.65 3.32-1.07 3.61A48.3 48.3 0 0112 21c-2.77 0-5.49-.24-8.14-.69-1.72-.29-2.3-2.38-1.07-3.61L5 14.5", title: "Multi-Agent Pipeline", desc: "Ingest → Score → Decide → Alert. Modular, explainable, and safety-critical.", gradient: "from-emerald-500/10 to-transparent", tag: "CORE" },
+  { icon: "M12 9v3.75m0-10.04A11.96 11.96 0 013.6 6 12 12 0 003 9.75c0 5.59 3.82 10.29 9 11.62 5.18-1.33 9-6.03 9-11.62 0-1.31-.21-2.57-.6-3.75h-.15c-3.2 0-6.1-1.25-8.25-3.29z", title: "Smart Escalation", desc: "Deterministic, auditable escalation — no black-box uncertainty.", gradient: "from-amber-500/10 to-transparent", tag: "SAFE" },
+  { icon: "M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z", title: "Live Dashboard", desc: "Visualize risk scores, contributing factors, and action recommendations.", gradient: "from-blue-500/10 to-transparent", tag: "VIZ" },
+  { icon: "M19.5 14.25v-2.63a3.38 3.38 0 00-3.38-3.38h-1.5A1.13 1.13 0 0113.5 7.13v-1.5A3.38 3.38 0 0010.13 2.25H8.25m2.25 0H5.63c-.62 0-1.13.5-1.13 1.13v17.25c0 .62.5 1.13 1.13 1.13h12.75c.62 0 1.13-.5 1.13-1.13V11.25a9 9 0 00-9-9z", title: "Instant Reports", desc: "Auto-generate structured incident summaries for authorities.", gradient: "from-rose-500/10 to-transparent", tag: "PDF" },
 ];
 
+/* ── Trusted / Tech Stack ─────────────────────────────────────────── */
+const TECH = ["FastAPI", "React 19", "PyTorch", "SSE", "TailwindCSS", "Pydantic v2"];
+
 /* ── Component ────────────────────────────────────────────────────── */
+interface LandingPageProps { onEnter: () => void; onDamageScan?: () => void; }
 
-interface LandingPageProps {
-  onEnter: () => void;
-}
-
-export default function LandingPage({ onEnter }: LandingPageProps) {
+export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps) {
   const [hoveredFeature, setHoveredFeature] = useState<number | null>(null);
+  const [visible, setVisible] = useState(false);
+  const agents = useCounter(4, 1200, 600);
+  const sensors = useCounter(100, 1800, 800);
+  const responseTime = useCounter(2, 800, 1000);
+
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 100); return () => clearTimeout(t); }, []);
 
   return (
     <div className="min-h-screen bg-navy-950 flex flex-col relative overflow-hidden">
-      {/* ── Background Effects ──────────────────────────── */}
-      <div className="absolute inset-0 pointer-events-none">
+      {/* ── Background Effects (multi-layer) ───────────── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <ParticleField />
         {/* Primary hero glow */}
-        <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[1100px] h-[800px] bg-cyan-500/[0.04] rounded-full blur-[180px]" />
-        {/* Secondary accent glow */}
-        <div className="absolute top-[20%] right-[5%] w-[400px] h-[400px] bg-blue-500/[0.02] rounded-full blur-[120px]" />
-        <div className="absolute top-[60%] left-[5%] w-[350px] h-[350px] bg-violet-500/[0.015] rounded-full blur-[100px]" />
-        {/* Subtle grid overlay */}
-        <div className="absolute inset-0 opacity-[0.015]" style={{
-          backgroundImage: "linear-gradient(rgba(6,182,212,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.35) 1px, transparent 1px)",
-          backgroundSize: "72px 72px",
+        <div className="absolute top-[-15%] left-1/2 -translate-x-1/2 w-[1200px] h-[900px] bg-blue-500/[0.05] rounded-full blur-[200px] animate-[pulse_8s_ease-in-out_infinite]" />
+        {/* Secondary accent glows */}
+        <div className="absolute top-[25%] right-[-5%] w-[500px] h-[500px] bg-violet-500/[0.03] rounded-full blur-[150px]" />
+        <div className="absolute top-[65%] left-[-5%] w-[400px] h-[400px] bg-blue-500/[0.025] rounded-full blur-[120px]" />
+        {/* Radial dot grid */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: "radial-gradient(rgba(96,165,250,0.5) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
         }} />
-        {/* Top edge gradient */}
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+        {/* Horizon line */}
+        <div className="absolute top-[45%] inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/10 to-transparent" />
+        {/* Top + Bottom edge accents */}
+        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-cyan-500/25 to-transparent" />
+        <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-blue-500/10 to-transparent" />
       </div>
 
       {/* ── Top Bar ────────────────────────────────────── */}
-      <header className="relative z-10 px-6 sm:px-10 lg:px-14 py-5 flex items-center justify-between border-b border-white/[0.03]">
+      <header className={`relative z-10 px-6 sm:px-10 lg:px-16 py-4 flex items-center justify-between border-b border-white/[0.06] bg-white/[0.02] backdrop-blur-md transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-3"}`}>
         <div className="flex items-center gap-3.5">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-400/20">
-            <span className="text-white font-black text-xs leading-none tracking-tight">IR</span>
+          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25 ring-1 ring-blue-400/20">
+            <span className="text-white font-black text-[11px] leading-none tracking-tight">IR</span>
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-transparent" />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[15px] font-extrabold text-white tracking-wide">IRIS</span>
-            <span className="text-[9px] text-slate-600 font-semibold tracking-widest uppercase hidden sm:inline">v1.0</span>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[17px] font-extrabold text-white tracking-wide">IRIS</span>
+            <span className="text-[9px] text-slate-400 font-bold tracking-[0.2em] uppercase hidden sm:inline">v1.0</span>
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-2 bg-emerald-500/[0.06] border border-emerald-500/15 rounded-full px-3 py-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse" />
-            <span className="text-[10px] text-emerald-400/80 font-semibold tracking-wide uppercase hidden sm:inline">Online</span>
-          </div>
+        <div className="hidden sm:flex items-center gap-6 text-[11px] font-semibold text-slate-400 tracking-wide uppercase">
+          <button onClick={() => document.getElementById('section-features')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Features</button>
+          <button onClick={() => document.getElementById('section-pipeline')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">Pipeline</button>
+          <button onClick={() => document.getElementById('section-about')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors cursor-pointer">About</button>
         </div>
       </header>
 
       {/* ── Hero Section ───────────────────────────────── */}
-      <main className="relative z-10 flex-1 flex flex-col items-center px-6 sm:px-10 lg:px-14">
+      <main className="relative z-10 flex-1 flex flex-col items-center px-6 sm:px-10 lg:px-16">
 
         {/* Hero Content */}
-        <div className="max-w-3xl w-full text-center pt-16 sm:pt-24 lg:pt-28 pb-14 sm:pb-20 animate-fade-in-up">
+        <div className={`max-w-4xl w-full text-center pt-14 sm:pt-20 lg:pt-24 pb-16 sm:pb-24 transition-all duration-1000 ease-out ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
           {/* Tagline Pill */}
-          <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-cyan-500/[0.08] to-blue-500/[0.04] border border-cyan-500/15 rounded-full px-5 py-2 mb-8 sm:mb-10">
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/60 animate-pulse" />
-            <span className="text-[9px] sm:text-[10px] font-bold text-cyan-300/90 uppercase tracking-[0.2em]">Infrastructure Risk Intelligence System</span>
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/[0.1] to-violet-500/[0.05] border border-blue-500/20 rounded-full px-6 py-2.5 mb-10 sm:mb-12 backdrop-blur-sm">
+            <div className="relative">
+              <div className="w-2 h-2 rounded-full bg-blue-400 shadow-lg shadow-blue-400/50" />
+              <div className="absolute inset-0 w-2 h-2 rounded-full bg-blue-400 animate-ping opacity-50" />
+            </div>
+            <span className="text-[9px] sm:text-[10px] font-bold text-blue-300/90 uppercase tracking-[0.25em]">Infrastructure Risk Intelligence System</span>
           </div>
 
           {/* Main Headline */}
-          <h1 className="text-[2.5rem] sm:text-[3.25rem] lg:text-[3.75rem] font-black text-white leading-[1.08] tracking-[-0.02em] mb-6 sm:mb-7">
+          <h1 className={`text-[2.75rem] sm:text-[3.75rem] lg:text-[4.5rem] font-black text-white leading-[1.05] tracking-[-0.03em] mb-7 sm:mb-8 transition-all duration-1000 delay-200 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
             Real-Time Bridge
             <br />
-            <span className="text-gradient-iris">Safety Intelligence</span>
+            <span className="text-gradient-iris relative">
+              Safety Intelligence
+              <svg className="absolute -bottom-2 left-0 w-full h-3 opacity-30" viewBox="0 0 300 12" preserveAspectRatio="none">
+                <path d="M0 6 Q75 0 150 6 Q225 12 300 6" fill="none" stroke="url(#hero-underline)" strokeWidth="2" />
+                <defs><linearGradient id="hero-underline" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0" /><stop offset="50%" stopColor="#60a5fa" /><stop offset="100%" stopColor="#3b82f6" stopOpacity="0" /></linearGradient></defs>
+              </svg>
+            </span>
           </h1>
 
           {/* Subheadline */}
-          <p className="text-sm sm:text-base lg:text-[17px] text-slate-400 max-w-[520px] mx-auto leading-[1.75] mb-10 sm:mb-12">
-            A multi-agent emergency decision system that transforms live sensor and
-            edge-camera events into actionable safety responses — in under 2&nbsp;seconds.
+          <p className={`text-sm sm:text-[17px] lg:text-lg text-slate-400 max-w-[580px] mx-auto leading-[1.8] mb-12 sm:mb-14 transition-all duration-1000 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            A multi-agent emergency decision system that transforms live sensor
+            and edge-camera events into actionable safety responses — <span className="text-white font-semibold">in under 2&nbsp;seconds</span>.
           </p>
 
-          {/* CTA Button */}
-          <button
-            onClick={onEnter}
-            className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-cyan-500 to-cyan-400 text-navy-950 px-10 sm:px-12 py-3.5 sm:py-4 rounded-xl text-sm sm:text-[15px] font-extrabold tracking-wide shadow-2xl shadow-cyan-500/25 hover:shadow-cyan-400/40 hover:translate-y-[-2px] active:translate-y-0 transition-all duration-300 cursor-pointer ring-1 ring-cyan-400/30"
-          >
-            Open Live Dashboard
-            <svg className="w-4.5 h-4.5 transition-transform duration-300 group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-            {/* Glow ring */}
-            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-400/20 to-cyan-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
-          </button>
+          {/* CTA Buttons */}
+          <div className={`flex flex-col sm:flex-row items-center justify-center gap-4 transition-all duration-1000 delay-500 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            <button
+              onClick={onEnter}
+              className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-blue-500 to-blue-400 text-white px-10 sm:px-14 py-4 sm:py-[18px] rounded-2xl text-sm sm:text-[15px] font-extrabold tracking-wide shadow-2xl shadow-blue-500/30 hover:shadow-blue-400/50 hover:translate-y-[-2px] active:translate-y-0 transition-all duration-300 cursor-pointer ring-1 ring-blue-400/30 overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/10 to-blue-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+              <span className="relative">Open Live Dashboard</span>
+              <svg className="relative w-5 h-5 transition-transform duration-300 group-hover:translate-x-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+            {onDamageScan && (
+              <button
+                onClick={onDamageScan}
+                className="group relative inline-flex items-center gap-3 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 px-8 sm:px-10 py-4 sm:py-[18px] rounded-2xl text-sm sm:text-[15px] font-extrabold tracking-wide border border-violet-500/25 hover:border-violet-400/40 hover:translate-y-[-2px] active:translate-y-0 transition-all duration-300 cursor-pointer overflow-hidden"
+              >
+                <svg className="relative w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.04 12.32a1.01 1.01 0 010-.64C3.42 7.51 7.36 4.5 12 4.5c4.64 0 8.57 3.01 9.96 7.18.07.21.07.43 0 .64C20.58 16.49 16.64 19.5 12 19.5c-4.64 0-8.57-3.01-9.96-7.18zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="relative">Damage Scan</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* ── Divider ──────────────────────────────────── */}
-        <div className="w-full max-w-4xl mb-14 sm:mb-16">
-          <div className="h-px bg-gradient-to-r from-transparent via-navy-600/50 to-transparent" />
-        </div>
-
-        {/* ── Metrics Strip ────────────────────────────── */}
-        <div className="w-full max-w-3xl mb-20 sm:mb-24 animate-fade-in-up" style={{ animationDelay: "80ms" }}>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            {METRICS.map((m) => (
-              <div key={m.label} className="group relative bg-navy-900/60 backdrop-blur-sm border border-navy-700/30 hover:border-cyan-500/15 rounded-xl px-5 py-5 sm:py-6 text-center transition-all duration-300">
-                <div className="flex justify-center mb-3 text-slate-600 group-hover:text-cyan-500/60 transition-colors duration-300">
-                  {m.icon}
+        {/* ── Animated Metrics Strip ───────────────────── */}
+        <div className={`w-full max-w-4xl mb-24 sm:mb-32 transition-all duration-1000 delay-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
+            {METRICS.map((m, i) => {
+              const counters = [agents, 24, responseTime, sensors];
+              return (
+                <div key={m.label} className="group relative bg-navy-900/50 backdrop-blur-md border border-navy-700/30 hover:border-blue-500/25 rounded-2xl px-5 py-6 sm:py-7 text-center transition-all duration-500 hover:translate-y-[-3px] hover:shadow-lg hover:shadow-blue-500/[0.05] overflow-hidden">
+                  {/* Hover glow */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-blue-500/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative">
+                    <div className="flex justify-center mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/[0.08] border border-blue-500/15 flex items-center justify-center text-blue-400/60 group-hover:text-blue-400 group-hover:bg-blue-500/15 transition-all duration-500">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d={m.icon} />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="text-3xl sm:text-[34px] font-black text-white tabular-nums leading-none mb-2 font-mono">
+                      {m.prefix || ""}{counters[i]}{m.suffix}
+                    </div>
+                    <div className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">{m.label}</div>
+                  </div>
                 </div>
-                <div className="text-2xl sm:text-[28px] font-black text-white tabular-nums leading-none mb-1.5">{m.value}</div>
-                <div className="text-[8px] sm:text-[9px] text-slate-500 font-bold uppercase tracking-[0.18em]">{m.label}</div>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Tech Stack Ticker ─────────────────────────── */}
+        <div className="w-full max-w-3xl mb-20 sm:mb-28">
+          <p className="text-center text-[9px] font-bold text-slate-600 uppercase tracking-[0.3em] mb-5">Built With</p>
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+            {TECH.map((t) => (
+              <span key={t} className="px-4 py-2 rounded-full bg-navy-900/40 border border-navy-700/25 text-[10px] sm:text-[11px] font-mono font-bold text-slate-500 hover:text-blue-400 hover:border-blue-500/20 transition-all duration-300 cursor-default backdrop-blur-sm">
+                {t}
+              </span>
             ))}
           </div>
         </div>
 
-        {/* ── How It Works ─────────────────────────────── */}
-        <div className="max-w-4xl w-full mb-20 sm:mb-24 animate-fade-in-up" style={{ animationDelay: "160ms" }}>
-          {/* Section Header */}
-          <div className="text-center mb-10 sm:mb-12">
-            <p className="text-[10px] font-bold text-cyan-500/60 uppercase tracking-[0.3em] mb-2">Process</p>
-            <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-              How It Works
+        {/* ── Gradient Divider ─────────────────────────── */}
+        <div className="w-full max-w-5xl mb-20 sm:mb-28">
+          <div className="h-px bg-gradient-to-r from-transparent via-blue-500/15 to-transparent" />
+        </div>
+
+        {/* ── How It Works (with animated pipeline) ─────── */}
+        <div id="section-pipeline" className="max-w-5xl w-full mb-24 sm:mb-32 scroll-mt-20">
+          <div className="text-center mb-14 sm:mb-16">
+            <div className="inline-flex items-center gap-2 bg-blue-500/[0.06] border border-blue-500/15 rounded-full px-4 py-1.5 mb-4">
+              <div className="w-1 h-1 rounded-full bg-blue-400" />
+              <span className="text-[8px] font-bold text-blue-400/80 uppercase tracking-[0.25em]">Process</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              How IRIS Works
             </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-3 max-w-lg mx-auto leading-relaxed">
+              From raw sensor data to coordinated emergency response in four stages.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-5 relative">
+            {/* Pipeline connector line (desktop) */}
+            <div className="hidden sm:block absolute top-[52px] left-[12%] right-[12%] h-px">
+              <div className="h-full bg-gradient-to-r from-blue-500/20 via-violet-500/20 via-amber-500/15 to-red-500/20" />
+              <div className="absolute inset-0 h-full bg-gradient-to-r from-blue-400 to-blue-400 animate-[shimmer_3s_ease-in-out_infinite]" style={{ width: "30%", filter: "blur(4px)", opacity: 0.3 }} />
+            </div>
+
             {WORKFLOW.map((w, i) => (
-              <div key={w.step} className="group relative flex flex-col sm:items-center sm:text-center rounded-xl bg-gradient-to-b from-navy-800/50 to-navy-900/30 border border-navy-700/30 hover:border-cyan-500/15 p-5 sm:p-6 transition-all duration-300">
-                {/* Step badge */}
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${w.color} border border-white/[0.06] flex items-center justify-center mb-3.5 sm:mb-4`}>
-                  <span className={`text-[10px] font-mono font-extrabold ${w.accent}`}>{w.step}</span>
-                </div>
-                <h3 className="text-[13px] sm:text-sm font-bold text-white mb-2">{w.title}</h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-[1.65]">{w.desc}</p>
-                {/* Connector arrow */}
-                {i < 3 && (
-                  <div className="hidden sm:flex absolute top-1/2 -right-3 translate-x-1/2 -translate-y-1/2 w-5 h-5 items-center justify-center">
-                    <svg className="w-3 h-3 text-navy-600" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/>
+              <div key={w.step} className="group relative flex flex-col items-center text-center rounded-2xl bg-gradient-to-b from-navy-800/50 to-navy-900/30 border border-navy-700/25 hover:border-blue-500/20 p-6 sm:p-7 transition-all duration-500 hover:translate-y-[-4px] hover:shadow-xl hover:shadow-blue-500/[0.04] backdrop-blur-sm overflow-hidden">
+                {/* Hover gradient */}
+                <div className={`absolute inset-0 bg-gradient-to-b ${w.color} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+
+                <div className="relative">
+                  {/* Step circle */}
+                  <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${w.color} border border-white/[0.06] flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-500`}>
+                    <svg className={`w-5 h-5 ${w.accent}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={w.icon} />
                     </svg>
+                  </div>
+                  <div className={`text-[9px] font-mono font-black ${w.accent} mb-2 tracking-[0.2em]`}>STEP {w.step}</div>
+                  <h3 className="text-sm sm:text-[15px] font-bold text-white mb-2.5">{w.title}</h3>
+                  <p className="text-[11px] text-slate-500 leading-[1.7]">{w.desc}</p>
+                </div>
+
+                {/* Mobile connector */}
+                {i < 3 && (
+                  <div className="sm:hidden my-4 flex flex-col items-center gap-1">
+                    <div className="w-px h-4 bg-gradient-to-b from-navy-600 to-transparent" />
+                    <svg className="w-3 h-3 text-navy-600 rotate-90" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
                   </div>
                 )}
               </div>
@@ -276,93 +319,137 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
           </div>
         </div>
 
-        {/* ── Divider ──────────────────────────────────── */}
-        <div className="w-full max-w-5xl mb-20 sm:mb-24">
+        {/* ── Gradient Divider ─────────────────────────── */}
+        <div className="w-full max-w-5xl mb-20 sm:mb-28">
           <div className="h-px bg-gradient-to-r from-transparent via-navy-600/40 to-transparent" />
         </div>
 
-        {/* ── Feature Grid ─────────────────────────────── */}
-        <div className="max-w-5xl w-full mb-20 sm:mb-24 animate-fade-in-up" style={{ animationDelay: "240ms" }}>
-          {/* Section Header */}
-          <div className="text-center mb-10 sm:mb-12">
-            <p className="text-[10px] font-bold text-cyan-500/60 uppercase tracking-[0.3em] mb-2">Features</p>
-            <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-              Core Capabilities
+        {/* ── Feature Grid — Premium Cards ──────────────── */}
+        <div id="section-features" className="max-w-5xl w-full mb-24 sm:mb-32 scroll-mt-20">
+          <div className="text-center mb-14 sm:mb-16">
+            <div className="inline-flex items-center gap-2 bg-blue-500/[0.06] border border-blue-500/15 rounded-full px-4 py-1.5 mb-4">
+              <div className="w-1 h-1 rounded-full bg-blue-400" />
+              <span className="text-[8px] font-bold text-blue-400/80 uppercase tracking-[0.25em]">Capabilities</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Core Features
             </h2>
+            <p className="text-xs sm:text-sm text-slate-500 mt-3 max-w-lg mx-auto leading-relaxed">
+              Everything needed for intelligent infrastructure safety monitoring.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {FEATURES.map((f, i) => (
               <div
                 key={f.title}
                 onMouseEnter={() => setHoveredFeature(i)}
                 onMouseLeave={() => setHoveredFeature(null)}
                 className={`
-                  group relative overflow-hidden rounded-xl border text-left
-                  transition-all duration-300 cursor-default
+                  group relative overflow-hidden rounded-2xl border text-left backdrop-blur-sm
+                  transition-all duration-500 cursor-default
                   ${hoveredFeature === i
-                    ? "border-cyan-500/20 bg-navy-800/60 shadow-lg shadow-cyan-500/[0.05] translate-y-[-2px]"
-                    : "border-navy-700/30 bg-navy-900/40 hover:border-navy-600/40"
+                    ? "border-blue-500/25 bg-navy-800/70 shadow-xl shadow-blue-500/[0.06] translate-y-[-4px]"
+                    : "border-navy-700/30 bg-navy-900/40 hover:border-navy-600/50"
                   }
                 `}
               >
-                {/* Subtle gradient overlay on hover */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${f.gradient} opacity-0 transition-opacity duration-300 ${hoveredFeature === i ? "opacity-100" : ""}`} />
+                {/* Animated gradient overlay */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${f.gradient} opacity-0 transition-opacity duration-500 ${hoveredFeature === i ? "opacity-100" : ""}`} />
+                {/* Corner accent */}
+                <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl ${f.gradient} opacity-0 transition-opacity duration-500 rounded-bl-full ${hoveredFeature === i ? "opacity-60" : ""}`} />
 
-                <div className="relative p-5 sm:p-6">
-                  {/* Icon container */}
-                  <div className={`w-9 h-9 rounded-lg border flex items-center justify-center mb-4 transition-all duration-300 ${
-                    hoveredFeature === i
-                      ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
-                      : "bg-navy-800/60 border-navy-700/40 text-slate-500"
-                  }`}>
-                    {f.icon}
+                <div className="relative p-6 sm:p-7">
+                  {/* Top row: icon + tag */}
+                  <div className="flex items-start justify-between mb-5">
+                    <div className={`w-11 h-11 rounded-xl border flex items-center justify-center transition-all duration-500 ${
+                      hoveredFeature === i
+                        ? "bg-blue-500/15 border-blue-500/25 text-blue-400 shadow-lg shadow-blue-500/10"
+                        : "bg-navy-800/60 border-navy-700/40 text-slate-500"
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={f.icon} />
+                      </svg>
+                    </div>
+                    <span className={`text-[8px] font-black tracking-[0.15em] px-2.5 py-1 rounded-lg border transition-all duration-500 ${
+                      hoveredFeature === i
+                        ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                        : "bg-navy-800/40 border-navy-700/30 text-slate-600"
+                    }`}>
+                      {f.tag}
+                    </span>
                   </div>
-                  <h3 className="text-[13px] font-bold text-white mb-2 leading-snug">{f.title}</h3>
-                  <p className="text-[11px] text-slate-500 leading-[1.7]">{f.desc}</p>
+                  <h3 className="text-[14px] font-bold text-white mb-2.5 leading-snug">{f.title}</h3>
+                  <p className="text-[11px] text-slate-500 leading-[1.75]">{f.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── Value Statement / CTA ────────────────────── */}
-        <div className="max-w-3xl w-full text-center mb-16 sm:mb-20 animate-fade-in-up" style={{ animationDelay: "300ms" }}>
-          <div className="relative py-14 sm:py-16 px-8 sm:px-12 rounded-2xl bg-gradient-to-b from-navy-800/40 to-navy-900/20 border border-navy-700/25 overflow-hidden">
-            {/* Background glow */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[200px] bg-cyan-500/[0.04] rounded-full blur-[80px]" />
+        {/* ── Big CTA Section ──────────────────────────── */}
+        <div id="section-about" className="max-w-4xl w-full text-center mb-20 sm:mb-28 scroll-mt-20">
+          <div className="relative py-16 sm:py-20 px-8 sm:px-14 rounded-3xl bg-gradient-to-b from-navy-800/50 to-navy-900/25 border border-navy-700/25 overflow-hidden backdrop-blur-sm">
+            {/* Animated background orbs */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[500px] h-[250px] bg-blue-500/[0.06] rounded-full blur-[100px] animate-[pulse_6s_ease-in-out_infinite]" />
+            <div className="absolute bottom-0 left-[20%] w-[200px] h-[200px] bg-violet-500/[0.03] rounded-full blur-[80px]" />
+            {/* Decorative dots */}
+            <div className="absolute top-4 left-4 grid grid-cols-3 gap-1.5 opacity-20">
+              {Array.from({length: 9}).map((_, i) => <div key={i} className="w-1 h-1 rounded-full bg-blue-400" />)}
+            </div>
+            <div className="absolute bottom-4 right-4 grid grid-cols-3 gap-1.5 opacity-20">
+              {Array.from({length: 9}).map((_, i) => <div key={i} className="w-1 h-1 rounded-full bg-blue-400" />)}
+            </div>
 
             <div className="relative">
-              <h2 className="text-xl sm:text-2xl lg:text-[1.75rem] font-black text-white mb-4 tracking-tight leading-snug">
-                From Detection to Decision — <span className="text-gradient-iris">in Seconds</span>
-              </h2>
-              <p className="text-xs sm:text-[13px] text-slate-400 leading-[1.8] max-w-md mx-auto mb-8">
-                Most systems detect anomalies.
-                IRIS ensures those detections become coordinated, explainable action.
-              </p>
-              <button
-                onClick={onEnter}
-                className="group inline-flex items-center gap-2.5 text-cyan-400 hover:text-cyan-300 text-sm font-bold tracking-wide transition-colors duration-200 cursor-pointer"
-              >
-                Explore the Dashboard
-                <svg className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              <div className="inline-flex items-center gap-2 bg-blue-500/[0.08] border border-blue-500/15 rounded-full px-4 py-1.5 mb-6">
+                <svg className="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                 </svg>
-              </button>
+                <span className="text-[8px] font-bold text-blue-400/80 uppercase tracking-[0.2em]">Ready</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl lg:text-[2.25rem] font-black text-white mb-5 tracking-tight leading-snug">
+                From Detection to Decision
+                <br />
+                <span className="text-gradient-iris">In Seconds, Not Hours</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 leading-[1.85] max-w-lg mx-auto mb-10">
+                Most systems detect anomalies. IRIS ensures those detections become
+                coordinated, explainable, and <span className="text-white font-medium">life-saving action</span>.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <button
+                  onClick={onEnter}
+                  className="group inline-flex items-center gap-3 bg-gradient-to-r from-blue-500 to-blue-400 text-white px-10 py-3.5 rounded-xl text-sm font-bold tracking-wide shadow-2xl shadow-blue-500/25 hover:shadow-blue-400/40 hover:translate-y-[-2px] transition-all duration-300 cursor-pointer ring-1 ring-blue-400/25"
+                >
+                  Launch Dashboard
+                  <svg className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </button>
+
+              </div>
             </div>
           </div>
         </div>
       </main>
 
       {/* ── Footer ─────────────────────────────────────── */}
-      <footer className="relative z-10 px-6 py-6 border-t border-white/[0.03]">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[10px] text-slate-600 font-medium tracking-wide">
-            IRIS v1.0 &mdash; Multi-Agent Infrastructure Risk Intelligence System
-          </p>
-          <p className="text-[10px] text-slate-700 font-mono tracking-wider">
-            Hackathon 2026
-          </p>
+      <footer className="relative z-10 px-6 py-7 border-t border-white/[0.04] backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+              <span className="text-white font-black text-[7px]">IR</span>
+            </div>
+            <p className="text-[10px] text-slate-600 font-medium tracking-wide">
+              IRIS v1.0 &mdash; Multi-Agent Infrastructure Risk Intelligence System
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-[10px] text-slate-700 font-mono tracking-wider">Hackathon 2026</span>
+            <div className="w-px h-3 bg-navy-700" />
+            <span className="text-[10px] text-slate-700 font-mono tracking-wider">Chennai, India</span>
+          </div>
         </div>
       </footer>
     </div>
