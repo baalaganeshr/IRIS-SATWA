@@ -93,27 +93,46 @@ class RegionFocusedDamageDetector(BaseCrackDetector):
             top_k = np.sort(block_scores_arr)[-k:]
             topk_mean = float(top_k.mean())
 
-            # Also compute the max single-block score (worst spot)
+            # Peak (single worst block)
             peak = float(block_scores_arr.max())
 
-            # Blend: 60 % top-K mean + 25 % peak + 15 % global mean
+            # Global mean (whole image average — includes sky/clean areas)
             global_mean = float(block_scores_arr.mean())
-            region_score = 0.60 * topk_mean + 0.25 * peak + 0.15 * global_mean
+
+            # ═══ DAMAGE EXTENT — what fraction of blocks are actually damaged? ═
+            # This is critical for distinguishing "surface cracks on intact wall"
+            # (few damaged blocks) from "structural collapse" (many damaged blocks)
+            damaged_block_ratio = float(np.mean(block_scores_arr > 0.35))
+            severely_damaged_ratio = float(np.mean(block_scores_arr > 0.55))
+
+            # Blend region score: balance between focused damage and overall extent
+            # If many blocks damaged → trust top-K more
+            # If few blocks damaged → weight global mean more (most of image is fine)
+            if damaged_block_ratio > 0.5:
+                # Widespread damage: trust top-K heavily
+                region_score = 0.50 * topk_mean + 0.15 * peak + 0.35 * global_mean
+            elif damaged_block_ratio > 0.25:
+                # Moderate spread: balanced
+                region_score = 0.40 * topk_mean + 0.15 * peak + 0.45 * global_mean
+            else:
+                # Localised / surface only: mostly intact, dampen top-K influence
+                region_score = 0.30 * topk_mean + 0.10 * peak + 0.60 * global_mean
 
             # ═══════════════════════════════════════════════════════════
             #  GLOBAL SIGNAL 1 — Structural break (dark gap detection)
             # ═══════════════════════════════════════════════════════════
             # Look for horizontal/vertical bands of darkness (bridge gap)
-            row_darkness = np.mean(g < 0.20, axis=1)   # fraction of dark pixels per row
-            col_darkness = np.mean(g < 0.20, axis=0)
-            # A structural break → some rows/cols are predominantly dark
+            # Must be CONTINUOUS dark bands, not scattered dark pixels
+            row_darkness = np.mean(g < 0.15, axis=1)   # stricter threshold
+            col_darkness = np.mean(g < 0.15, axis=0)
+            # A structural break → consecutive rows/cols are predominantly dark
             max_row_dark = float(np.max(row_darkness))
             max_col_dark = float(np.max(col_darkness))
-            # Count rows/cols that are > 40 % dark
-            dark_row_ratio = float(np.mean(row_darkness > 0.40))
-            dark_col_ratio = float(np.mean(col_darkness > 0.40))
-            break_score = min(1.0, max(max_row_dark, max_col_dark) * 1.5
-                              + (dark_row_ratio + dark_col_ratio) * 2.0)
+            # Count rows/cols that are > 50 % dark (stricter)
+            dark_row_ratio = float(np.mean(row_darkness > 0.50))
+            dark_col_ratio = float(np.mean(col_darkness > 0.50))
+            break_score = min(1.0, max(max_row_dark, max_col_dark) * 1.2
+                              + (dark_row_ratio + dark_col_ratio) * 1.5)
 
             # ═══════════════════════════════════════════════════════════
             #  GLOBAL SIGNAL 2 — Edge spatial spread
@@ -144,28 +163,33 @@ class RegionFocusedDamageDetector(BaseCrackDetector):
             # ═══════════════════════════════════════════════════════════
             #  FINAL COMBINATION
             # ═══════════════════════════════════════════════════════════
-            #  70 % region-based + 12 % break + 10 % spread + 8 % sharpness
-            raw_conf = (0.70 * region_score
-                        + 0.12 * break_score
-                        + 0.10 * spread_score
-                        + 0.08 * sharpness_score)
+            #  55 % region + 15 % break + 8 % spread + 7 % sharpness + 15 % extent
+            extent_score = min(1.0, damaged_block_ratio * 1.8 + severely_damaged_ratio * 1.5)
 
-            # Synergy: if region_score AND break_score both high → catastrophic
-            if region_score > 0.5 and break_score > 0.4:
-                raw_conf += 0.15
-            elif region_score > 0.4 and break_score > 0.3:
-                raw_conf += 0.08
+            raw_conf = (0.55 * region_score
+                        + 0.15 * break_score
+                        + 0.08 * spread_score
+                        + 0.07 * sharpness_score
+                        + 0.15 * extent_score)
+
+            # Synergy: ONLY when region damage is high AND structural break confirmed
+            # AND damage is widespread — this indicates actual structural failure
+            if region_score > 0.5 and break_score > 0.5 and damaged_block_ratio > 0.4:
+                raw_conf += 0.12
+            elif region_score > 0.45 and break_score > 0.4 and damaged_block_ratio > 0.3:
+                raw_conf += 0.06
 
             # Count how many scores are individually strong
             all_scores = {
                 "region": region_score, "break": break_score,
                 "spread": spread_score, "sharpness": sharpness_score,
+                "extent": extent_score,
             }
-            firing = sum(1 for v in all_scores.values() if v > 0.45)
+            firing = sum(1 for v in all_scores.values() if v > 0.5)
             if firing >= 4:
-                raw_conf += 0.10
+                raw_conf += 0.06
             elif firing >= 3:
-                raw_conf += 0.05
+                raw_conf += 0.03
 
             # Floor suppression for very clean images
             if raw_conf < 0.18:
@@ -211,32 +235,32 @@ class RegionFocusedDamageDetector(BaseCrackDetector):
     @staticmethod
     def _score_block(g_block, edge_block, strong_block, colour_block, np) -> float:
         """Compute a 0-1 damage score for a single image block."""
-        # 1. Edge density
+        # 1. Edge density — need significant edges, not just texture
         edge_density = float(strong_block.mean())
-        ed_score = min(1.0, edge_density / 0.12)
+        ed_score = min(1.0, edge_density / 0.18)  # harder to saturate
 
         # 2. Texture roughness
         tex_std = float(g_block.std())
-        tex_score = min(1.0, tex_std / 0.12)
+        tex_score = min(1.0, tex_std / 0.16)  # concrete texture ~0.08, cracks ~0.15+
 
         # 3. Local contrast (range of intensities)
         g_flat = g_block.flatten()
         contrast = float(np.percentile(g_flat, 95) - np.percentile(g_flat, 5))
-        con_score = min(1.0, contrast / 0.45)
+        con_score = min(1.0, contrast / 0.55)  # stricter
 
         # 4. Dark-gap ratio (proportion of very dark pixels — voids, separations)
-        dark = float((g_block < 0.15).astype(np.float32).mean())
-        dark_score = min(1.0, dark / 0.25)
+        dark = float((g_block < 0.12).astype(np.float32).mean())  # stricter dark threshold
+        dark_score = min(1.0, dark / 0.30)
 
         # 5. Color anomaly (rust/earth tones, or high channel variance)
         r, gr, bl = colour_block[:,:,0], colour_block[:,:,1], colour_block[:,:,2]
-        rust = float(((r > gr + 12) & (gr > bl + 4)).astype(np.float32).mean())
-        chan_var = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 80.0)
-        col_score = min(1.0, rust * 4.0 + chan_var * 2.5)
+        rust = float(((r > gr + 15) & (gr > bl + 5)).astype(np.float32).mean())
+        chan_var = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 100.0)
+        col_score = min(1.0, rust * 3.5 + chan_var * 2.0)
 
         # Weighted block score
-        score = (0.28 * ed_score
-                 + 0.22 * tex_score
+        score = (0.30 * ed_score
+                 + 0.20 * tex_score
                  + 0.20 * con_score
                  + 0.15 * dark_score
                  + 0.15 * col_score)
