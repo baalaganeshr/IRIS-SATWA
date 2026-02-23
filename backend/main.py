@@ -151,6 +151,85 @@ class VisionInjectPayload(BaseModel):
     crack_confidence: float = Field(ge=0.0, le=1.0)
 
 
+def _build_vision_assessment(crack_confidence: float) -> dict:
+    """Build a rich, actionable vision-specific assessment from crack confidence."""
+    pct = round(crack_confidence * 100, 1)
+
+    if pct >= 80:
+        severity = "CRITICAL"
+        risk_band = "RED"
+        structural_impact = (
+            "Severe structural degradation detected. Multiple crack patterns indicate "
+            "advanced material fatigue with potential load-bearing capacity reduction."
+        )
+        urgency_window = "Immediate — within 24 hours"
+        actions = [
+            "Restrict heavy vehicle traffic (>10 t) on the affected span immediately",
+            "Deploy field inspection team for close-range visual & tactile assessment",
+            "Install real-time crack-width monitoring sensors at identified locations",
+            "Notify structural engineering consultant for load-rating re-evaluation",
+            "Prepare contingency lane-closure or full-closure plan",
+            "Schedule core sampling / GPR scan to assess sub-surface condition",
+        ]
+        summary = "Critical structural damage confirmed. Immediate intervention required to ensure public safety."
+    elif pct >= 60:
+        severity = "HIGH"
+        risk_band = "ORANGE"
+        structural_impact = (
+            "Significant surface cracking observed, suggesting progressive deterioration. "
+            "Structural integrity may be compromised under sustained or peak loading."
+        )
+        urgency_window = "Within 48–72 hours"
+        actions = [
+            "Schedule priority bridge inspection within 48 hours",
+            "Reduce speed limits on affected section as a precaution",
+            "Install temporary crack monitoring gauges",
+            "Review recent maintenance and load history for the span",
+            "Prepare a repair scope estimate for budget allocation",
+        ]
+        summary = "Significant damage detected. Priority inspection and monitoring recommended."
+    elif pct >= 40:
+        severity = "MODERATE"
+        risk_band = "YELLOW"
+        structural_impact = (
+            "Moderate surface anomalies detected. Early-stage cracking or weathering patterns "
+            "present — not immediately critical but warrants planned follow-up."
+        )
+        urgency_window = "Within 1–2 weeks"
+        actions = [
+            "Add to the next scheduled bridge inspection queue",
+            "Photograph and document crack locations for trend tracking",
+            "Compare with previous inspection records for progression analysis",
+            "Consider preventive sealant application on hairline cracks",
+        ]
+        summary = "Moderate wear detected. Schedule routine inspection and trend monitoring."
+    else:
+        severity = "LOW"
+        risk_band = "GREEN"
+        structural_impact = (
+            "Minimal or no significant surface damage observed. The structure appears "
+            "to be in acceptable condition based on visual analysis."
+        )
+        urgency_window = "Routine schedule"
+        actions = [
+            "No immediate action required",
+            "Continue regular inspection cycle",
+            "Archive scan results for historical comparison",
+        ]
+        summary = "No significant damage detected. Structure is in acceptable condition."
+
+    return {
+        "crack_confidence_pct": pct,
+        "severity": severity,
+        "risk_band": risk_band,
+        "structural_impact": structural_impact,
+        "urgency_window": urgency_window,
+        "recommended_actions": actions,
+        "summary": summary,
+        "sensor_injected": {"sensor_id": "VISION-CAM-01", "type": "STRESS", "value_pct": pct},
+    }
+
+
 @app.post("/api/vision/inject")
 async def vision_inject(payload: VisionInjectPayload):
     """Convert crack-confidence into a synthetic sensor reading and push through the pipeline."""
@@ -166,7 +245,10 @@ async def vision_inject(payload: VisionInjectPayload):
     )
     update = pipeline.process([reading])
     await _broadcast(update)
-    return update
+
+    response = update.model_dump()
+    response["vision_assessment"] = _build_vision_assessment(payload.crack_confidence)
+    return response
 
 
 @app.get("/api/stream")
