@@ -13,7 +13,8 @@ from agents.ingestion import IngestionAgent
 from agents.risk_scorer import RiskScorerAgent
 from agents.decision import DecisionAgent
 from agents.alerter import AlertAgent
-from models.schemas import AgentLog, Alert, SensorReading, SSEUpdate
+from models.schemas import AgentLog, Alert, Forecast, SensorReading, SSEUpdate
+from ml.predictor import RiskForecaster
 
 log = logging.getLogger("iris.pipeline")
 
@@ -33,6 +34,10 @@ class Pipeline:
         # agent activity log buffer
         self._agent_logs: deque[AgentLog] = deque(maxlen=100)
         self._log_seq: int = 0
+
+        # ML forecasting
+        self._forecaster = RiskForecaster()
+        self._history: deque[list[float]] = deque(maxlen=300)
 
     def _make_log(self, agent: str, message: str) -> AgentLog:
         """Create an AgentLog with a unique id."""
@@ -61,6 +66,25 @@ class Pipeline:
         log.info("Risk: score=%d  level=%s", risk.overall_score, risk.risk_level)
         batch.append(self._make_log("RiskScorer", f"Score: {risk.overall_score}/100 — Level: {risk.risk_level}"))
 
+        # 2b – Append sensor vector for ML history
+        bd = risk.breakdown
+        self._history.append([
+            bd.stress_score,
+            bd.vibration_score,
+            bd.load_score,
+            bd.environmental_score,
+        ])
+
+        # 2c – ML forecast (advisory only)
+        forecast: Forecast | None = None
+        if len(self._history) >= 10:
+            fc = self._forecaster.forecast_trend(list(self._history), risk.overall_score)
+            if fc["predicted_risk"] is not None:
+                forecast = Forecast(predicted_risk=fc["predicted_risk"], trend=fc["trend"])
+                risk.predicted_risk = fc["predicted_risk"]
+                risk.trend = fc["trend"]
+                log.info("Forecast: predicted=%s trend=%s", fc["predicted_risk"], fc["trend"])
+
         # 3 – Decision
         decision = self.decision_agent.decide(risk)
         log.info("Decision: action=%s  urgency=%s", decision.action, decision.urgency)
@@ -80,6 +104,7 @@ class Pipeline:
             decision=decision,
             alert=alert,
             agent_logs=batch,
+            forecast=forecast,
         )
 
         self.last_update = update

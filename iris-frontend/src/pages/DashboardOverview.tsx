@@ -10,6 +10,7 @@ import AgentTimeline from "../components/AgentTimeline";
 import DecisionEvidence from "../components/DecisionEvidence";
 import DemoScriptControls from "../components/DemoScriptControls";
 import ExplainabilityPack from "../components/ExplainabilityPack";
+import ForecastCard from "../components/ForecastCard";
 
 interface DashboardOverviewProps {
   risk: RiskAssessment | null;
@@ -181,9 +182,10 @@ export default function DashboardOverview({
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Risk + System Status */}
+        {/* Left: Risk + Forecast + System Status */}
         <div className="lg:col-span-4 space-y-5">
           <RiskCard risk={risk} />
+          <ForecastCard risk={risk} />
           <SystemStatus
             connected={connection === "connected"}
             scenarioRunning={scenarioRunning}

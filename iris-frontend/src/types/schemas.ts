@@ -21,6 +21,13 @@ export interface RiskAssessment {
   contributing_factors: string[];
   forced_red?: boolean;
   forced_red_reason?: string | null;
+  predicted_risk?: number | null;
+  trend?: "rising" | "stable" | "falling" | null;
+}
+
+export interface Forecast {
+  predicted_risk: number;
+  trend: "rising" | "stable" | "falling";
 }
 
 export interface Decision {
@@ -54,4 +61,5 @@ export interface SSEUpdate {
   decision: Decision;
   alert: Alert | null;
   agent_logs?: AgentLog[];
+  forecast?: Forecast | null;
 }

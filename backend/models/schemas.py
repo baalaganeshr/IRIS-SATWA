@@ -53,6 +53,8 @@ class RiskAssessment(BaseModel):
     contributing_factors: list[str] = []
     forced_red: bool = False
     forced_red_reason: Optional[str] = None
+    predicted_risk: Optional[float] = None
+    trend: Optional[Literal["rising", "stable", "falling"]] = None
 
 
 # ── Decision ────────────────────────────────────────────────────────────────
@@ -85,6 +87,13 @@ class AgentLog(BaseModel):
     message: str
 
 
+# ── Forecast ────────────────────────────────────────────────────────────────
+
+class Forecast(BaseModel):
+    predicted_risk: float
+    trend: Literal["rising", "stable", "falling"]
+
+
 # ── SSE update (everything the frontend needs) ─────────────────────────────
 
 class SSEUpdate(BaseModel):
@@ -93,6 +102,7 @@ class SSEUpdate(BaseModel):
     decision: Decision
     alert: Optional[Alert] = None
     agent_logs: list[AgentLog] = []
+    forecast: Optional[Forecast] = None
 
 
 # ── Scenario metadata ──────────────────────────────────────────────────────
