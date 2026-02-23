@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import type { RiskAssessment, Decision, Alert, AgentLog } from "../types/schemas";
 import type { ConnectionStatus } from "../api/sse";
+import type { Structure } from "../data/structures";
+import { getRiskColor, getRiskTextColor, getTypeIcon } from "../data/structures";
 import RiskCard from "../components/RiskCard";
 import DecisionCard from "../components/DecisionCard";
 import AlertFeed from "../components/AlertFeed";
@@ -23,6 +25,10 @@ interface DashboardOverviewProps {
   agentLogs: AgentLog[];
   demoRunning: boolean;
   onDemoRunningChange: (running: boolean) => void;
+  structures: Structure[];
+  activeStructureId?: string | null;
+  onActiveStructureChange?: (id: string | null) => void;
+  onNavigate?: (page: string) => void;
 }
 
 /* ── Live Mini Ticker — simulated sensor stream ───────────────────── */
@@ -101,6 +107,10 @@ export default function DashboardOverview({
   agentLogs,
   demoRunning,
   onDemoRunningChange,
+  structures,
+  activeStructureId,
+  onActiveStructureChange,
+  onNavigate,
 }: DashboardOverviewProps) {
   return (
     <div className="space-y-5 animate-enter">
@@ -182,9 +192,77 @@ export default function DashboardOverview({
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Risk + Forecast + System Status */}
+        {/* Left: Risk + Forecast + Structures + System Status */}
         <div className="lg:col-span-4 space-y-5">
-          <RiskCard risk={risk} />
+          <RiskCard risk={risk} structures={structures} activeStructureId={activeStructureId} />
+
+          {/* ── Monitored Structures ── */}
+          <div className="navy-card p-5 animate-fade-in-up" style={{ animationDelay: "150ms" }}>
+            <h3 className="section-title mb-3">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21" />
+              </svg>
+              Monitored Structures
+              <span className="ml-auto text-[9px] font-bold text-slate-500">{structures.length} active</span>
+            </h3>
+            <div className="space-y-2">
+              {structures.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    onActiveStructureChange?.(s.id);
+                    onNavigate?.("map");
+                  }}
+                  className={`w-full text-left grid grid-cols-[24px_1fr_44px_68px] items-center gap-2 bg-navy-900/50 rounded-lg px-3 py-2.5 border transition-all duration-500 cursor-pointer group ${
+                    activeStructureId === s.id
+                      ? 'border-cyan-400/60 ring-1 ring-cyan-400/30 shadow-[0_0_12px_rgba(34,211,238,0.12)]'
+                      : 'border-navy-700/40 hover:border-cyan-500/40 hover:bg-navy-800/60'
+                  }`}
+                >
+                  {/* Icon */}
+                  <span className="text-base leading-none">{getTypeIcon(s.type)}</span>
+
+                  {/* Name + risk bar */}
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-slate-300 truncate group-hover:text-cyan-300 transition-colors">{s.name}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <div className="flex-1 h-1.5 bg-navy-700/50 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${getRiskColor(s.riskLevel)}`} style={{ width: `${s.riskLevel}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk % — fixed width */}
+                  <span className={`text-[11px] font-mono font-bold tabular-nums text-right ${getRiskTextColor(s.riskLevel)}`}>
+                    {s.riskLevel}%
+                  </span>
+
+                  {/* Status badge — fixed width */}
+                  <span className={`text-center px-1.5 py-0.5 rounded text-[8px] font-black tracking-wider leading-tight ${
+                    s.riskLevel >= 75 ? "bg-red-500/15 text-red-400"
+                    : s.riskLevel >= 50 ? "bg-orange-500/15 text-orange-400"
+                    : s.riskLevel >= 25 ? "bg-amber-500/15 text-amber-400"
+                    : "bg-emerald-500/15 text-emerald-400"
+                  }`}>
+                    {s.status.toUpperCase()}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Hint */}
+            <p className="mt-2 text-[9px] text-slate-600 text-center">Click a structure to view on Risk Map</p>
+
+            {/* Fleet average */}
+            <div className="mt-3 flex items-center justify-between bg-navy-950/50 rounded-lg px-3 py-2 border border-navy-700/30">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Fleet Avg Risk</span>
+              <span className={`text-sm font-black font-mono ${getRiskTextColor(Math.round(structures.reduce((sum, s) => sum + s.riskLevel, 0) / structures.length))}`}>
+                {Math.round(structures.reduce((sum, s) => sum + s.riskLevel, 0) / structures.length)}%
+              </span>
+            </div>
+          </div>
+
           <ForecastCard risk={risk} />
           <SystemStatus
             connected={connection === "connected"}
@@ -216,6 +294,7 @@ export default function DashboardOverview({
               onStartScenario={onStartScenario}
               disabled={scenarioRunning}
               onDemoRunningChange={onDemoRunningChange}
+              onActiveStructureChange={onActiveStructureChange}
             />
 
             {/* Agent Activity Timeline */}

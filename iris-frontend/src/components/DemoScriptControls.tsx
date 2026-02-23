@@ -1,49 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_STRUCTURES, getTypeIcon } from "../data/structures";
 
 interface DemoScriptControlsProps {
   onStartScenario: (name: string) => void;
   disabled: boolean;
   onDemoRunningChange: (running: boolean) => void;
+  onActiveStructureChange?: (id: string | null) => void;
 }
 
-/* ── Phase definitions ────────────────────────────────────────────── */
+/* ── Per-structure demo phases (cycles all 5 structures) ──────────── */
+interface DemoPhase {
+  structureId: string;
+  structureName: string;
+  structureIcon: string;
+  scenario: string;
+  label: string;
+  duration: number;
+  narration: string;
+  color: string;
+  bg: string;
+  border: string;
+  dot: string;
+}
 
-const PHASES = [
-  {
-    name: "normal",
-    label: "NORMAL",
-    duration: 15,
-    narration: "Baseline monitoring — all factors within safe range.",
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/15",
-    border: "border-emerald-500/25",
-    dot: "bg-emerald-400",
-  },
-  {
-    name: "storm",
-    label: "STORM",
-    duration: 30,
-    narration: "Environmental stress rising — escalating to WARN/RESTRICT as needed.",
-    color: "text-orange-400",
-    bg: "bg-orange-500/15",
-    border: "border-orange-500/25",
-    dot: "bg-orange-400",
-  },
-  {
-    name: "critical",
-    label: "CRITICAL",
-    duration: 30,
-    narration: "Compound trigger fired — forced RED, evacuation protocol engaged.",
-    color: "text-red-400",
-    bg: "bg-red-500/15",
-    border: "border-red-500/25",
-    dot: "bg-red-400",
-  },
-] as const;
+function buildPhases(): DemoPhase[] {
+  const scenarioMap: Record<string, { scenario: string; label: string; narration: string; color: string; bg: string; border: string; dot: string }> = {
+    Critical: { scenario: "critical", label: "CRITICAL", narration: "Compound trigger fired — forced RED, evacuation protocol engaged.", color: "text-red-400", bg: "bg-red-500/15", border: "border-red-500/25", dot: "bg-red-400" },
+    High:     { scenario: "storm",    label: "STORM",    narration: "Environmental stress rising — escalating to WARN/RESTRICT.", color: "text-orange-400", bg: "bg-orange-500/15", border: "border-orange-500/25", dot: "bg-orange-400" },
+    Elevated: { scenario: "storm",    label: "ELEVATED", narration: "Moderate stress detected — heightened monitoring active.", color: "text-amber-400", bg: "bg-amber-500/15", border: "border-amber-500/25", dot: "bg-amber-400" },
+    Normal:   { scenario: "normal",   label: "NORMAL",   narration: "Baseline monitoring — all factors within safe range.", color: "text-emerald-400", bg: "bg-emerald-500/15", border: "border-emerald-500/25", dot: "bg-emerald-400" },
+  };
 
-const TOTAL = PHASES.reduce((s, p) => s + p.duration, 0); // 75s active + buffer ≈ 90s
+  return DEFAULT_STRUCTURES.map((s) => {
+    const cfg = scenarioMap[s.status] ?? scenarioMap.Normal;
+    return {
+      structureId: s.id,
+      structureName: s.name,
+      structureIcon: getTypeIcon(s.type),
+      duration: 15,
+      ...cfg,
+    };
+  });
+}
 
-export default function DemoScriptControls({ onStartScenario, disabled, onDemoRunningChange }: DemoScriptControlsProps) {
+const PHASES = buildPhases();
+const TOTAL = PHASES.reduce((s, p) => s + p.duration, 0); // 75s active + 15s buffer ≈ 90s
+
+export default function DemoScriptControls({ onStartScenario, disabled, onDemoRunningChange, onActiveStructureChange }: DemoScriptControlsProps) {
   const [running, setRunning] = useState(false);
   const [phaseIdx, setPhaseIdx] = useState(-1);
   const [countdown, setCountdown] = useState(0);
@@ -77,7 +80,8 @@ export default function DemoScriptControls({ onStartScenario, disabled, onDemoRu
         setPhaseIdx(idx);
         cdRef.current = phase.duration;
         setCountdown(phase.duration);
-        onStartScenario(phase.name);
+        onStartScenario(phase.scenario);
+        onActiveStructureChange?.(phase.structureId);
       }, elapsed * 1000);
       timers.current.push(t);
       elapsed += phase.duration;
@@ -90,16 +94,17 @@ export default function DemoScriptControls({ onStartScenario, disabled, onDemoRu
       if (cdRef.current >= 0) setCountdown(cdRef.current);
     }, 1000);
 
-    // Auto-finish (total phase time + 15s observation buffer = ~90s)
+    // Auto-finish (total phase time + 15s observation buffer ≈ 90s)
     const finishT = setTimeout(() => {
       cleanup();
       setRunning(false);
       setPhaseIdx(-1);
       setCountdown(0);
       onDemoRunningChange(false);
+      onActiveStructureChange?.(null);
     }, (TOTAL + 15) * 1000);
     timers.current.push(finishT);
-  }, [cleanup, onStartScenario, onDemoRunningChange]);
+  }, [cleanup, onStartScenario, onDemoRunningChange, onActiveStructureChange]);
 
   /* ── Stop Demo ──────────────────────────────────────────────────── */
   const handleStop = useCallback(() => {
@@ -108,7 +113,8 @@ export default function DemoScriptControls({ onStartScenario, disabled, onDemoRu
     setPhaseIdx(-1);
     setCountdown(0);
     onDemoRunningChange(false);
-  }, [cleanup, onDemoRunningChange]);
+    onActiveStructureChange?.(null);
+  }, [cleanup, onDemoRunningChange, onActiveStructureChange]);
 
   const phase = phaseIdx >= 0 ? PHASES[phaseIdx] : null;
 
@@ -146,18 +152,41 @@ export default function DemoScriptControls({ onStartScenario, disabled, onDemoRu
         </button>
       )}
 
-      {/* Status line — phase + countdown */}
+      {/* ── Structure Progress Strip ── */}
+      {running && (
+        <div className="mt-3 flex gap-1">
+          {PHASES.map((p, i) => (
+            <div
+              key={p.structureId}
+              className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${
+                i < phaseIdx ? "bg-cyan-400" : i === phaseIdx ? `${p.dot} animate-pulse` : "bg-navy-700/50"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Status line — active structure + phase + countdown */}
       {running && phase && (
-        <div className={`mt-3 flex items-center justify-between ${phase.bg} ${phase.border} border rounded-lg px-3 py-2 animate-slide-in`}>
-          <div className="flex items-center gap-2">
-            <span className={`w-1.5 h-1.5 rounded-full ${phase.dot} animate-pulse`} />
-            <span className={`text-[11px] font-bold tracking-wider ${phase.color}`}>
-              {phase.label}
+        <div className={`mt-2 ${phase.bg} ${phase.border} border rounded-lg px-3 py-2.5 animate-slide-in`}>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{phase.structureIcon}</span>
+              <span className="text-[11px] font-bold text-white truncate">{phase.structureName}</span>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-slate-300 flex-shrink-0">
+              {countdown}s
             </span>
           </div>
-          <span className="text-[11px] font-mono font-bold text-slate-300">
-            {countdown}s
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${phase.dot} animate-pulse`} />
+            <span className={`text-[10px] font-bold tracking-wider ${phase.color}`}>
+              {phase.label}
+            </span>
+            <span className="text-[9px] font-mono text-slate-600 ml-auto">
+              {phaseIdx + 1}/{PHASES.length}
+            </span>
+          </div>
         </div>
       )}
 
@@ -171,7 +200,7 @@ export default function DemoScriptControls({ onStartScenario, disabled, onDemoRu
       {/* Idle info */}
       {!running && (
         <p className="mt-2 text-[10px] text-slate-600 text-center">
-          Cycles through Normal → Storm → Critical with live narration
+          Cycles all {PHASES.length} structures with live risk narration
         </p>
       )}
     </div>

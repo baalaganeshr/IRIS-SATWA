@@ -1,133 +1,8 @@
 import { useState, useEffect } from "react";
-import type { RiskAssessment, Alert } from "../types/schemas";
+import type { Alert } from "../types/schemas";
+import type { Structure } from "../data/structures";
+import { getRiskColor, getRiskTextColor, getRiskBg, getTypeIcon } from "../data/structures";
 import { exportStructuralReport, exportEmergencyProtocol } from "../utils/pdfExport";
-
-/* ── Bridge / Structure Data ──────────────────────────────────────── */
-
-interface Structure {
-  id: string;
-  name: string;
-  type: "bridge" | "building" | "overpass";
-  position: { top: string; left: string };
-  riskLevel: number;
-  status: string;
-  details: {
-    built: string;
-    material: string;
-    spans: number;
-    lastInspection: string;
-    loadCapacity: string;
-    length?: string;
-    width?: string;
-    foundation?: string;
-    seismicRating?: string;
-    trafficLoad?: string;
-    maintenanceHistory?: string[];
-  };
-}
-
-const STRUCTURES: Structure[] = [
-  {
-    id: "BR-001",
-    name: "Adyar River Bridge (Anna Salai)",
-    type: "bridge",
-    position: { top: "30%", left: "20%" },
-    riskLevel: 82,
-    status: "Critical",
-    details: {
-      built: "1987", material: "Reinforced Concrete", spans: 4, lastInspection: "2025-12-15", loadCapacity: "45 tons",
-      length: "320m", width: "18m", foundation: "Deep Piling (24m)", seismicRating: "Zone III",
-      trafficLoad: "12,400 vehicles/day",
-      maintenanceHistory: ["2025-12: Crack monitoring sensors installed", "2025-06: Bearing pad replacement (NHAI)", "2024-09: Deck resurfacing — PWD", "2023-03: Structural load test — IIT Madras"],
-    },
-  },
-  {
-    id: "BR-002",
-    name: "Kathipara Flyover (NH-45)",
-    type: "overpass",
-    position: { top: "48%", left: "50%" },
-    riskLevel: 35,
-    status: "Normal",
-    details: {
-      built: "2010", material: "Steel & Concrete", spans: 2, lastInspection: "2026-01-20", loadCapacity: "60 tons",
-      length: "180m", width: "22m", foundation: "Spread Footing", seismicRating: "Zone III",
-      trafficLoad: "18,200 vehicles/day",
-      maintenanceHistory: ["2026-01: Routine inspection — passed (CMDA)", "2025-07: Joint sealant replacement", "2025-01: Anti-corrosion coating"],
-    },
-  },
-  {
-    id: "BL-001",
-    name: "Ripon Building (Corporation HQ)",
-    type: "building",
-    position: { top: "72%", left: "22%" },
-    riskLevel: 48,
-    status: "Elevated",
-    details: {
-      built: "1913", material: "Heritage Masonry & Steel Frame", spans: 1, lastInspection: "2026-02-01", loadCapacity: "N/A",
-      length: "85m", width: "60m", foundation: "Mat Foundation", seismicRating: "Zone III",
-      trafficLoad: "N/A",
-      maintenanceHistory: ["2026-02: Foundation settlement check", "2025-10: Seismic retrofitting assessment", "2025-05: Fire safety audit — TNFRS"],
-    },
-  },
-  {
-    id: "BR-003",
-    name: "Napier Bridge (Cooum River)",
-    type: "bridge",
-    position: { top: "30%", left: "78%" },
-    riskLevel: 62,
-    status: "High",
-    details: {
-      built: "1869", material: "Stone & Pre-stressed Concrete", spans: 3, lastInspection: "2025-11-30", loadCapacity: "15 tons",
-      length: "140m", width: "6m", foundation: "Bored Piles (18m)", seismicRating: "Zone III",
-      trafficLoad: "2,800 pedestrians/day",
-      maintenanceHistory: ["2025-11: Vibration anomaly detected", "2025-08: Heritage railing restoration", "2025-02: Deck waterproofing — Chennai Corp"],
-    },
-  },
-  {
-    id: "BL-002",
-    name: "T. Nagar Residential Block",
-    type: "building",
-    position: { top: "72%", left: "68%" },
-    riskLevel: 20,
-    status: "Normal",
-    details: {
-      built: "2018", material: "Reinforced Concrete", spans: 1, lastInspection: "2026-01-10", loadCapacity: "N/A",
-      length: "45m", width: "30m", foundation: "Raft Foundation", seismicRating: "Zone III",
-      trafficLoad: "N/A",
-      maintenanceHistory: ["2026-01: Annual structural audit — passed (CMDA)", "2025-06: Plumbing & utility check"],
-    },
-  },
-];
-
-function getRiskColor(level: number): string {
-  if (level >= 75) return "bg-red-500";
-  if (level >= 50) return "bg-orange-500";
-  if (level >= 25) return "bg-yellow-500";
-  return "bg-green-500";
-}
-
-function getRiskTextColor(level: number): string {
-  if (level >= 75) return "text-red-400";
-  if (level >= 50) return "text-orange-400";
-  if (level >= 25) return "text-amber-400";
-  return "text-green-400";
-}
-
-function getRiskBg(level: number): string {
-  if (level >= 75) return "bg-red-500/10";
-  if (level >= 50) return "bg-orange-500/10";
-  if (level >= 25) return "bg-amber-500/10";
-  return "bg-green-500/10";
-}
-
-function getTypeIcon(type: string): string {
-  switch (type) {
-    case "bridge": return "🌉";
-    case "overpass": return "🛣️";
-    case "building": return "🏢";
-    default: return "📍";
-  }
-}
 
 /* ── Live Sensor Ticker ───────────────────────────────────────────── */
 
@@ -432,18 +307,30 @@ function EmergencyProtocolModal({ structure, onClose }: { structure: Structure; 
 /* ── Main Component ───────────────────────────────────────────────── */
 
 interface BridgeMapProps {
-  risk: RiskAssessment | null;
+  structures: Structure[];
   alerts: Alert[];
+  activeStructureId?: string | null;
 }
 
-export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
+export default function BridgeMap({ structures, alerts, activeStructureId }: BridgeMapProps) {
   const [selectedStructure, setSelectedStructure] = useState<Structure | null>(null);
+  const [hoveredStructure, setHoveredStructure] = useState<Structure | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
+  /* Auto-select structure when demo cycles to it */
+  useEffect(() => {
+    if (activeStructureId) {
+      const target = structures.find((s) => s.id === activeStructureId) ?? null;
+      setSelectedStructure(target);
+    } else {
+      setSelectedStructure(null);
+    }
+  }, [activeStructureId, structures]);
 
   const handleZoomIn = () => setZoom((z) => Math.min(z + 0.25, 3));
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 1));
@@ -467,13 +354,6 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
   };
   const handleMouseUp = () => setIsPanning(false);
 
-  const structures = STRUCTURES.map((s, i) => {
-    if (i === 0 && risk) {
-      return { ...s, riskLevel: risk.overall_score, status: risk.risk_level === "RED" ? "Critical" : risk.risk_level === "ORANGE" ? "High" : risk.risk_level === "YELLOW" ? "Elevated" : "Normal" };
-    }
-    return s;
-  });
-
   const filteredAlerts = alerts.filter((a) => a.severity === "ORANGE" || a.severity === "RED");
 
   return (
@@ -482,7 +362,7 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
       {showReport && selectedStructure && <FullReportModal structure={selectedStructure} onClose={() => setShowReport(false)} />}
       {showEmergency && selectedStructure && <EmergencyProtocolModal structure={selectedStructure} onClose={() => setShowEmergency(false)} />}
 
-      <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
         {/* ── Map Area ─────────────────────────────────────────── */}
         <div className="lg:col-span-2 flex flex-col gap-5">
           <div className="navy-card p-5 flex-grow">
@@ -732,12 +612,15 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
               {/* Structure markers */}
               {structures.map((s) => {
                 const isSelected = selectedStructure?.id === s.id;
+                const isHovered = hoveredStructure?.id === s.id;
                 return (
                   <div
                     key={s.id}
-                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer ${isSelected ? "z-20" : "z-10 hover:z-15"}`}
+                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer ${isSelected || isHovered ? "z-20" : "z-10 hover:z-15"}`}
                     style={{ top: s.position.top, left: s.position.left }}
                     onClick={() => setSelectedStructure(isSelected ? null : s)}
+                    onMouseEnter={() => setHoveredStructure(s)}
+                    onMouseLeave={() => setHoveredStructure(null)}
                   >
                     {/* Outer glow ring */}
                     {s.riskLevel >= 50 && (
@@ -748,7 +631,7 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
                     <div className={`
                       w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 border-2 shadow-xl
                       ${getRiskColor(s.riskLevel)}
-                      ${isSelected ? "border-cyan-400 ring-4 ring-cyan-400/40 scale-110" : "border-white/70 hover:scale-110 hover:border-white"}
+                      ${isSelected ? "border-cyan-400 ring-4 ring-cyan-400/40 scale-110" : isHovered ? "border-white scale-110 ring-2 ring-white/20" : "border-white/70 hover:scale-110 hover:border-white"}
                       ${s.riskLevel >= 75 ? "animate-pulse" : ""}
                     `}>
                       <span className="text-white text-xs font-bold drop-shadow">{s.riskLevel}</span>
@@ -803,81 +686,179 @@ export default function BridgeMap({ risk, alerts }: BridgeMapProps) {
         </div>
 
         {/* ── Right Sidebar ────────────────────────────────────── */}
-        <div className="lg:col-span-1 flex flex-col gap-5">
-          {selectedStructure ? (
-            <div className="navy-card p-5">
-              <h3 className="section-title mb-4">
-                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-cyan-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <div className="lg:col-span-1 flex flex-col gap-3">
+          {(() => {
+            /* Show selected (clicked) structure, or hovered structure as preview, or empty state */
+            const activeStructure = selectedStructure ?? hoveredStructure;
+            const isPreview = !selectedStructure && !!hoveredStructure;
+
+            if (activeStructure) {
+              return (
+                <div className={`navy-card p-4 transition-all duration-200 ${isPreview ? "ring-1 ring-cyan-500/20" : ""}`}>
+                  <h3 className="section-title mb-3">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-cyan-400">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Risk Assessment
+                    {isPreview && <span className="ml-auto text-[8px] text-cyan-400/70 uppercase tracking-wider font-mono">Preview</span>}
+                  </h3>
+
+                  <div className="space-y-2.5">
+                    {/* Structure name + icon */}
+                    <div className="flex items-center gap-2.5 bg-navy-900/40 rounded-lg px-3 py-2.5 border border-navy-700/40">
+                      <span className="text-xl leading-none">{getTypeIcon(activeStructure.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate leading-tight">{activeStructure.name}</p>
+                        <p className="text-[11px] text-slate-500 font-mono leading-tight mt-0.5">{activeStructure.id} &bull; Est. {activeStructure.details.built}</p>
+                      </div>
+                    </div>
+
+                    {/* Risk score — inline row */}
+                    <div className="flex items-center gap-3 bg-navy-900/30 rounded-lg px-3 py-2.5 border border-navy-700/30">
+                      <div className={`text-4xl font-black font-mono leading-none ${getRiskTextColor(activeStructure.riskLevel)}`}>
+                        {activeStructure.riskLevel}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">Risk Score</span>
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full w-fit ${
+                          activeStructure.riskLevel >= 75 ? "bg-red-500/15 text-red-400" :
+                          activeStructure.riskLevel >= 50 ? "bg-orange-500/15 text-orange-400" :
+                          activeStructure.riskLevel >= 25 ? "bg-amber-500/15 text-amber-400" :
+                          "bg-green-500/15 text-green-400"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            activeStructure.riskLevel >= 75 ? "bg-red-400 animate-pulse" :
+                            activeStructure.riskLevel >= 50 ? "bg-orange-400" :
+                            activeStructure.riskLevel >= 25 ? "bg-amber-400" :
+                            "bg-green-400"
+                          }`} />
+                          {activeStructure.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Key details — compact table style */}
+                    <div className="rounded-lg border border-navy-700/40 overflow-hidden">
+                      {[
+                        ["Spans", String(activeStructure.details.spans)],
+                        ["Type", activeStructure.type.charAt(0).toUpperCase() + activeStructure.type.slice(1)],
+                        ["Material", activeStructure.details.material],
+                        ["Load Capacity", activeStructure.details.loadCapacity],
+                        ["Last Inspection", activeStructure.details.lastInspection],
+                      ].map(([label, value], i) => (
+                        <div key={label} className={`flex items-center justify-between px-3 py-2 ${i % 2 === 0 ? "bg-navy-900/40" : "bg-navy-900/20"} ${i < 4 ? "border-b border-navy-700/30" : ""}`}>
+                          <span className="text-xs text-slate-500">{label}</span>
+                          <span className="text-xs text-white font-semibold">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Risk Breakdown bars */}
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1.5">Risk Breakdown</p>
+                      <div className="space-y-1.5">
+                        {[
+                          { label: "Stress", pct: Math.min(100, activeStructure.riskLevel + 8), color: "from-rose-600 to-red-400" },
+                          { label: "Vibration", pct: Math.min(100, Math.round(activeStructure.riskLevel * 0.8 + 5)), color: "from-amber-600 to-yellow-400" },
+                          { label: "Load", pct: Math.min(100, Math.round(activeStructure.riskLevel * 0.6 + 10)), color: "from-blue-600 to-cyan-400" },
+                        ].map((bar) => (
+                          <div key={bar.label} className="flex items-center gap-2">
+                            <span className="text-[11px] text-slate-400 w-16 shrink-0">{bar.label}</span>
+                            <div className="flex-1 h-2 bg-navy-900 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full bg-gradient-to-r ${bar.color}`} style={{ width: `${bar.pct}%` }} />
+                            </div>
+                            <span className={`text-[11px] font-bold font-mono w-9 text-right ${bar.pct >= 70 ? "text-red-400" : bar.pct >= 50 ? "text-orange-400" : "text-slate-400"}`}>{bar.pct}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Buttons — only when clicked/selected, not on hover preview */}
+                    {!isPreview && (
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => setShowReport(true)}
+                          className="btn-primary flex-1 !py-2 !text-xs !rounded-lg"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          Full Report
+                        </button>
+                        <button
+                          onClick={() => setShowEmergency(true)}
+                          className="btn-danger flex-1 !py-2 !text-xs !rounded-lg"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Emergency
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Hover hint */}
+                    {isPreview && (
+                      <p className="text-center text-[9px] text-slate-600 uppercase tracking-widest pt-1">Click marker to select &amp; view full report</p>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="navy-card flex flex-col items-center justify-center h-48 text-slate-500 p-5">
+                <svg className="w-8 h-8 mb-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                 </svg>
-                Risk Assessment
-              </h3>
-
-              <div className="space-y-4">
-                <div className="text-center py-4">
-                  <div className={`text-5xl font-black font-mono ${getRiskTextColor(selectedStructure.riskLevel)}`}>
-                    {selectedStructure.riskLevel}
-                  </div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Risk Score</div>
-                </div>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between bg-navy-900/50 rounded-lg px-3 py-2.5 border border-navy-700/50">
-                    <span className="text-slate-500 text-xs">Spans</span>
-                    <span className="text-white font-bold text-xs">{selectedStructure.details.spans}</span>
-                  </div>
-                  <div className="flex justify-between bg-navy-900/50 rounded-lg px-3 py-2.5 border border-navy-700/50">
-                    <span className="text-slate-500 text-xs">Type</span>
-                    <span className="text-white font-bold capitalize text-xs">{selectedStructure.type}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowReport(true)}
-                  className="btn-primary w-full"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  View Full Report
-                </button>
-                <button
-                  onClick={() => setShowEmergency(true)}
-                  className="btn-danger w-full"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  Emergency Protocol
-                </button>
+                <p className="text-sm font-medium">Hover or select a structure</p>
+                <p className="text-xs text-slate-600 mt-1">Point at a marker to preview details</p>
               </div>
-            </div>
-          ) : (
-            <div className="navy-card flex flex-col items-center justify-center h-48 text-slate-500 p-5">
-              <svg className="w-8 h-8 mb-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
-              <p className="text-sm font-medium">Select a structure on the map</p>
-              <p className="text-xs text-slate-600 mt-1">Click a marker to view details</p>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Alert Feed */}
-          <div className="navy-card p-5 flex-1 flex flex-col" style={{ maxHeight: "420px" }}>
+          <div className="navy-card p-4">
             <h3 className="section-title mb-3">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-cyan-400">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               Incident &amp; Emergency Feed
             </h3>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            <div className="space-y-2">
               {filteredAlerts.length === 0 ? (
-                <div className="text-center text-slate-600 text-sm py-8">
-                  <svg className="w-6 h-6 mx-auto mb-2 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  No active incidents
+                <div className="space-y-2.5">
+                  {/* All-clear banner */}
+                  <div className="flex items-center gap-2.5 bg-green-500/8 border border-green-500/15 rounded-lg px-3 py-2">
+                    <div className="w-6 h-6 rounded-full bg-green-500/15 flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-green-400">All Clear</p>
+                      <p className="text-[10px] text-slate-500">No active incidents detected</p>
+                    </div>
+                  </div>
+
+                  {/* Quick stats — single row */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: "Monitored", value: "5", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4", color: "text-cyan-400" },
+                      { label: "Sensors", value: "Live", icon: "M13 10V3L4 14h7v7l9-11h-7z", color: "text-amber-400" },
+                      { label: "Uptime", value: "99.8%", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", color: "text-green-400" },
+                      { label: "Scan", value: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }), icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", color: "text-slate-400" },
+                    ].map((stat) => (
+                      <div key={stat.label} className="bg-navy-900/40 border border-navy-700/30 rounded-lg px-2 py-1.5 text-center">
+                        <svg className={`w-3 h-3 ${stat.color} mx-auto mb-0.5`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d={stat.icon} />
+                        </svg>
+                        <p className={`text-[10px] font-bold ${stat.color} leading-none`}>{stat.value}</p>
+                        <p className="text-[8px] text-slate-600 leading-tight mt-0.5">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 filteredAlerts.slice(0, 10).map((alert, i) => (

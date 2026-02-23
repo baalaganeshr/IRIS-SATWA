@@ -175,15 +175,15 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
               <div className="w-2 h-2 rounded-full bg-blue-400 shadow-lg shadow-blue-400/50" />
               <div className="absolute inset-0 w-2 h-2 rounded-full bg-blue-400 animate-ping opacity-50" />
             </div>
-            <span className="text-[9px] sm:text-[10px] font-bold text-blue-300/90 uppercase tracking-[0.25em]">Infrastructure Risk Intelligence System</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-blue-300/90 uppercase tracking-[0.25em]">Intelligent Risk &amp; Structural Analysis</span>
           </div>
 
           {/* Main Headline */}
           <h1 className={`text-[2.75rem] sm:text-[3.75rem] lg:text-[4.5rem] font-black text-white leading-[1.05] tracking-[-0.03em] mb-7 sm:mb-8 transition-all duration-1000 delay-200 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
-            Real-Time Bridge
+            Infrastructure Risk
             <br />
             <span className="text-gradient-iris relative">
-              Safety Intelligence
+              Intelligence System
               <svg className="absolute -bottom-2 left-0 w-full h-3 opacity-30" viewBox="0 0 300 12" preserveAspectRatio="none">
                 <path d="M0 6 Q75 0 150 6 Q225 12 300 6" fill="none" stroke="url(#hero-underline)" strokeWidth="2" />
                 <defs><linearGradient id="hero-underline" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#3b82f6" stopOpacity="0" /><stop offset="50%" stopColor="#60a5fa" /><stop offset="100%" stopColor="#3b82f6" stopOpacity="0" /></linearGradient></defs>
@@ -442,7 +442,7 @@ export default function LandingPage({ onEnter, onDamageScan }: LandingPageProps)
               <span className="text-white font-black text-[7px]">IR</span>
             </div>
             <p className="text-[10px] text-slate-600 font-medium tracking-wide">
-              IRIS v1.0 &mdash; Multi-Agent Infrastructure Risk Intelligence System
+              IRIS v1.0 &mdash; Multi-Agent Intelligent Risk &amp; Structural Analysis
             </p>
           </div>
           <div className="flex items-center gap-4">

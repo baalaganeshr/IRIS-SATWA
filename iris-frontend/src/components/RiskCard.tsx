@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import type { RiskAssessment, RiskLevel } from "../types/schemas";
+import type { Structure } from "../data/structures";
+import { getTypeIcon, getRiskColor, getRiskTextColor } from "../data/structures";
 
 /* ── Color System ─────────────────────────────────────────────────── */
 
@@ -208,9 +210,11 @@ function BreakdownBar({ label, keyName, value }: { label: string; keyName: strin
 
 interface RiskCardProps {
   risk: RiskAssessment | null;
+  structures?: Structure[];
+  activeStructureId?: string | null;
 }
 
-export default function RiskCard({ risk }: RiskCardProps) {
+export default function RiskCard({ risk, structures, activeStructureId }: RiskCardProps) {
   if (!risk) {
     return (
       <div className="navy-card p-6 flex flex-col items-center justify-center min-h-[440px] animate-fade-in-up">
@@ -243,10 +247,19 @@ export default function RiskCard({ risk }: RiskCardProps) {
     { label: "Environmental", key: "environmental", value: risk.breakdown.environmental_score },
   ];
 
+  // Fleet-averaged score & level when structures are available
+  const fleetAvg = structures && structures.length > 0
+    ? Math.round(structures.reduce((sum, s) => sum + s.riskLevel, 0) / structures.length)
+    : risk.overall_score;
+  const displayLevel: RiskLevel =
+    structures && structures.length > 0
+      ? (fleetAvg >= 75 ? "RED" : fleetAvg >= 50 ? "ORANGE" : fleetAvg >= 25 ? "YELLOW" : "GREEN")
+      : risk.risk_level;
+
   return (
-    <div className={`navy-card ${CARD_ACCENT[risk.risk_level]} p-6 transition-all duration-500 animate-fade-in-up`}>
+    <div className={`navy-card ${CARD_ACCENT[displayLevel]} p-6 transition-all duration-500 animate-fade-in-up`}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="section-title">
           <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -254,28 +267,74 @@ export default function RiskCard({ risk }: RiskCardProps) {
           Risk Assessment
         </h2>
         <span className={`text-[10px] font-bold uppercase tracking-[0.1em] px-2.5 py-1 rounded-lg ${
-          risk.risk_level === "GREEN"  ? "bg-emerald-500/10 text-emerald-400" :
-          risk.risk_level === "YELLOW" ? "bg-amber-500/10 text-amber-400" :
-          risk.risk_level === "ORANGE" ? "bg-orange-500/10 text-orange-400" :
+          displayLevel === "GREEN"  ? "bg-emerald-500/10 text-emerald-400" :
+          displayLevel === "YELLOW" ? "bg-amber-500/10 text-amber-400" :
+          displayLevel === "ORANGE" ? "bg-orange-500/10 text-orange-400" :
           "bg-red-500/10 text-red-400"
         }`}>
-          {risk.risk_level}
+          {displayLevel}
         </span>
       </div>
 
-      <RingGauge score={risk.overall_score} level={risk.risk_level} />
+      {/* Active structure indicator */}
+      {(() => {
+        const active = activeStructureId && structures?.find(s => s.id === activeStructureId);
+        return active ? (
+          <div className="flex items-center justify-center gap-2 mb-4 px-3 py-1.5 rounded-lg bg-cyan-500/8 border border-cyan-500/20 animate-fade-in">
+            <span className="text-sm">{getTypeIcon(active.type)}</span>
+            <span className="text-[11px] font-bold text-cyan-300 truncate">{active.name}</span>
+            <span className="text-[8px] font-mono text-cyan-500/60">{active.id}</span>
+          </div>
+        ) : (
+          <div className="mb-3" />
+        );
+      })()}
 
-      <p className={`text-center text-xs font-medium mt-3 mb-1 ${LEVEL_TEXT[risk.risk_level]} opacity-80`}>
-        {LEVEL_DESC[risk.risk_level]}
+      {/* Ring gauge — fleet average when structures available */}
+      <RingGauge score={fleetAvg} level={displayLevel} />
+      <p className={`text-center text-xs font-medium mt-3 mb-1 ${LEVEL_TEXT[displayLevel]} opacity-80`}>
+        {LEVEL_DESC[displayLevel]}
       </p>
 
       <div className="my-5 h-px bg-navy-700" />
 
-      <div className="space-y-4">
-        {bars.map((bar) => (
-          <BreakdownBar key={bar.key} label={bar.label} keyName={bar.key} value={bar.value} />
-        ))}
-      </div>
+      {/* Structure risk bars — the 5 monitored points */}
+      {structures && structures.length > 0 ? (
+        <div className="space-y-3.5">
+          {structures.map((s) => {
+            const pct = s.riskLevel;
+            const isActive = activeStructureId === s.id;
+            return (
+              <div key={s.id} className={`transition-all duration-500 rounded-lg ${isActive ? 'bg-cyan-500/5 px-2.5 py-2 -mx-2.5 ring-1 ring-cyan-500/20' : ''}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm text-slate-400 flex items-center gap-2 font-medium truncate">
+                    <span className="text-base leading-none">{getTypeIcon(s.type)}</span>
+                    <span className="truncate">{s.name}</span>
+                    {isActive && (
+                      <span className="text-[7px] font-black text-cyan-400 bg-cyan-500/15 px-1.5 py-0.5 rounded tracking-wider flex-shrink-0">ACTIVE</span>
+                    )}
+                  </span>
+                  <span className={`text-sm font-bold font-mono tabular-nums flex-shrink-0 ml-2 ${getRiskTextColor(pct)}`}>
+                    {pct}%
+                  </span>
+                </div>
+                <div className="h-2 bg-navy-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ease-out ${getRiskColor(pct)} bar-shimmer`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {bars.map((bar) => (
+            <BreakdownBar key={bar.key} label={bar.label} keyName={bar.key} value={bar.value} />
+          ))}
+        </div>
+      )}
 
       {risk.contributing_factors.length > 0 && (
         <div className="mt-5 pt-4 border-t border-navy-700">

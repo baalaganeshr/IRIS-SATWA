@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentLog, Alert, Decision, RiskAssessment } from "./types/schemas";
 import type { ConnectionStatus } from "./api/sse";
+import { DEFAULT_STRUCTURES, applyRiskToStructures } from "./data/structures";
+import type { Structure } from "./data/structures";
 import { fetchAlerts, fetchAgentLogs, fetchStatus, startScenario } from "./api/client";
 import { createSSEConnection } from "./api/sse";
 import { useSmoothScroll } from "./hooks/useLenis";
@@ -33,6 +35,8 @@ function App() {
   const [redFlash, setRedFlash] = useState(false);
   const [agentLogs, setAgentLogs] = useState<AgentLog[]>([]);
   const [demoRunning, setDemoRunning] = useState(false);
+  const [structures, setStructures] = useState<Structure[]>(DEFAULT_STRUCTURES);
+  const [activeStructureId, setActiveStructureId] = useState<string | null>(null);
   const scenarioTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLevel = useRef<string | null>(null);
   const seenLogIds = useRef<Set<string>>(new Set());
@@ -241,6 +245,14 @@ function App() {
 
   // ── Demo state callback (timer logic lives in DemoScriptControls) ──
   const handleDemoRunningChange = useCallback((v: boolean) => setDemoRunning(v), []);
+  const handleActiveStructureChange = useCallback((id: string | null) => setActiveStructureId(id), []);
+
+  // ── Keep structures in sync with pipeline risk ──────────────────────
+  useEffect(() => {
+    if (risk) {
+      setStructures(applyRiskToStructures(DEFAULT_STRUCTURES, risk.overall_score, risk.risk_level));
+    }
+  }, [risk]);
 
   const filteredAlertCount = alerts.filter(
     (a) => a.severity === "ORANGE" || a.severity === "RED"
@@ -268,13 +280,17 @@ function App() {
               agentLogs={agentLogs}
               demoRunning={demoRunning}
               onDemoRunningChange={handleDemoRunningChange}
+              structures={structures}
+              activeStructureId={activeStructureId}
+              onActiveStructureChange={handleActiveStructureChange}
+              onNavigate={handleNavigate}
             />
           </ErrorBoundary>
         );
       case "map":
         return (
           <ErrorBoundary fallbackTitle="Map failed to load">
-            <BridgeMap risk={risk} alerts={alerts} />
+            <BridgeMap structures={structures} alerts={alerts} activeStructureId={activeStructureId} />
           </ErrorBoundary>
         );
       case "analytics":
@@ -315,6 +331,10 @@ function App() {
               agentLogs={agentLogs}
               demoRunning={demoRunning}
               onDemoRunningChange={handleDemoRunningChange}
+              structures={structures}
+              activeStructureId={activeStructureId}
+              onActiveStructureChange={handleActiveStructureChange}
+              onNavigate={handleNavigate}
             />
           </ErrorBoundary>
         );
