@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="e" x1="16" y1="32" x2="48" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#030712"/>
+  <rect x="1" y="1" width="62" height="62" rx="13" stroke="url(#g)" stroke-width="1.5" fill="none"/>
+  <!-- Eye outline -->
+  <path d="M8 32c0 0 10-16 24-16s24 16 24 16-10 16-24 16S8 32 8 32z" stroke="url(#e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Iris -->
+  <circle cx="32" cy="32" r="9" stroke="url(#e)" stroke-width="2" fill="none"/>
+  <!-- Pupil -->
+  <circle cx="32" cy="32" r="4" fill="url(#g)"/>
+  <!-- Highlight -->
+  <circle cx="35" cy="29" r="1.8" fill="white" opacity="0.7"/>
+</svg>
