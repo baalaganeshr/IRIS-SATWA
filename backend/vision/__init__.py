@@ -1,7 +1,7 @@
 """
-Vision analysis module — multi-signal heuristic for structural damage detection.
-Combines edge density, texture roughness, color anomaly, and contrast analysis
-to produce a crack/damage confidence score.
+Vision analysis module — region-focused structural damage detection.
+Uses TOP-K block scoring (not global averaging) so that sky/vegetation
+background doesn't dilute the damage signal from the actual structure.
 
 Structured so it can be swapped to a pretrained crack-detection model later.
 """
@@ -25,32 +25,32 @@ class BaseCrackDetector(ABC):
         ...
 
 
-class MultiSignalDamageDetector(BaseCrackDetector):
+class RegionFocusedDamageDetector(BaseCrackDetector):
     """
-    Multi-signal heuristic that combines several image features to estimate
-    structural damage confidence.  No GPU required.
+    Region-focused damage detector.
 
-    Signals combined (weighted):
-      1. Edge density   — ratio of strong edge pixels (cracks = many edges)
-      2. Edge energy     — variance of edge map (damage = chaotic edges)
-      3. Texture entropy — local intensity variance (damage = rough texture)
-      4. Color anomaly   — deviation in colour channels (rust, exposed concrete)
-      5. Contrast ratio  — local contrast extremes (breaks in surface)
+    Key insight:  real damage photos contain large non-damage areas (sky,
+    vegetation, road).  Global averaging dilutes the score.  Instead we
+    score every NxN block independently, then take the **TOP-K worst
+    blocks** as the damage signal.  This way a bridge broken in half
+    scores high even if 60 % of the image is sky.
+
+    Per-block signals (combined into a block damage score):
+      1. Edge density (cracks / fracture lines)
+      2. Texture roughness (surface degradation)
+      3. Local contrast (breaks in material)
+      4. Dark-gap ratio (voids / separations)
+      5. Color anomaly (rust / exposed rebar / earth tones)
+
+    Global signals (bonus on top):
+      6. Structural break — large dark horizontal / vertical bands
+      7. Edge spatial spread — damage across many regions
     """
 
-    # ── tuneable knobs ──────────────────────────────────────────────
-    WEIGHTS = {
-        "edge_density": 0.22,
-        "edge_energy":  0.18,
-        "texture":      0.20,
-        "color":        0.15,
-        "contrast":     0.18,
-        "disorder":     0.07,   # NEW: spatial disorder of edges
-    }
-    SIZE = (384, 384)          # analysis resolution
-    EDGE_THRESHOLD = 0.06      # lowered — catch finer cracks
-    TEXTURE_BLOCK = 12         # smaller blocks = finer texture detail
-    # ────────────────────────────────────────────────────────────────
+    SIZE = (448, 448)
+    BLOCK = 32                 # block size for per-region scoring
+    TOP_K_PCT = 0.30           # use worst 30 % of blocks
+    EDGE_THRESH = 0.05
 
     def analyze(self, image_bytes: bytes) -> dict:
         try:
@@ -61,116 +61,136 @@ class MultiSignalDamageDetector(BaseCrackDetector):
             grey = raw.convert("L").resize(self.SIZE)
             colour = raw.convert("RGB").resize(self.SIZE)
 
-            scores: dict[str, float] = {}
+            g = np.asarray(grey, dtype=np.float32) / 255.0
+            c_arr = np.asarray(colour, dtype=np.float32)
+            h, w = g.shape
+            B = self.BLOCK
 
-            # --- 1. Edge density (proportion of strong edge pixels) ----------
+            # Full-image edge map
             edges = grey.filter(ImageFilter.FIND_EDGES)
             edge_arr = np.asarray(edges, dtype=np.float32) / 255.0
-            strong = (edge_arr > self.EDGE_THRESHOLD).astype(np.float32)
-            density = float(strong.mean())
-            # Aggressive sigmoid: 8 % edges ≈ 0.5, 15 % ≈ 0.9
-            scores["edge_density"] = float(min(1.0, 1.0 / (1.0 + np.exp(-25 * (density - 0.08)))))
+            strong = (edge_arr > self.EDGE_THRESH).astype(np.float32)
 
-            # --- 2. Edge energy (variance of edge map) -----------------------
-            energy = float(edge_arr.var())
-            # More sensitive: var 0.008 ≈ calm, var 0.025+ ≈ severe
-            scores["edge_energy"] = float(min(1.0, energy / 0.020))
+            # ═══════════════════════════════════════════════════════════
+            #  PER-BLOCK SCORING — score each BxB block independently
+            # ═══════════════════════════════════════════════════════════
+            block_scores = []
+            for y in range(0, h - B + 1, B):
+                for x in range(0, w - B + 1, B):
+                    bs = self._score_block(
+                        g[y:y+B, x:x+B],
+                        edge_arr[y:y+B, x:x+B],
+                        strong[y:y+B, x:x+B],
+                        c_arr[y:y+B, x:x+B],
+                        np,
+                    )
+                    block_scores.append(bs)
 
-            # --- 3. Texture roughness (mean local std-dev in NxN blocks) -----
-            g = np.asarray(grey, dtype=np.float32) / 255.0
-            b = self.TEXTURE_BLOCK
-            h, w = g.shape
-            local_stds = []
-            for y in range(0, h - b + 1, b):
-                for x in range(0, w - b + 1, b):
-                    patch = g[y:y+b, x:x+b]
-                    local_stds.append(float(patch.std()))
-            mean_local_std = float(np.mean(local_stds)) if local_stds else 0.0
-            # Also measure the proportion of "rough" blocks (std > 0.08)
-            rough_ratio = float(np.mean([1.0 if s > 0.08 else 0.0 for s in local_stds])) if local_stds else 0.0
-            # Combined texture score
-            scores["texture"] = float(min(1.0, (mean_local_std / 0.10) * 0.6 + rough_ratio * 0.6))
+            block_scores_arr = np.array(block_scores)
 
-            # --- 4. Colour anomaly (saturation spread + brown/rust + grey variance) ---
-            c_arr = np.asarray(colour, dtype=np.float32)
-            r, gr, bl = c_arr[:,:,0], c_arr[:,:,1], c_arr[:,:,2]
-            # Channel spread — cracks expose different-coloured material
-            spread = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 100.0)
-            # Rust/earth tone detector: R > G > B
-            rust_mask = ((r > gr + 10) & (gr > bl + 3)).astype(np.float32)
-            rust_ratio = float(rust_mask.mean())
-            # Dark region detector (shadow in cracks/gaps): pixels < 60 brightness
-            lum = (0.299 * r + 0.587 * gr + 0.114 * bl)
-            dark_ratio = float((lum < 60).astype(np.float32).mean())
-            scores["color"] = float(min(1.0, spread * 3.0 + rust_ratio * 3.5 + dark_ratio * 2.0))
+            # TOP-K: use the worst (highest-scoring) 30 % of blocks
+            k = max(1, int(len(block_scores) * self.TOP_K_PCT))
+            top_k = np.sort(block_scores_arr)[-k:]
+            topk_mean = float(top_k.mean())
 
-            # --- 5. Contrast ratio (P95 – P5 of luminance in blocks) --------
-            contrasts = []
-            for y in range(0, h - b + 1, b):
-                for x in range(0, w - b + 1, b):
-                    patch = g[y:y+b, x:x+b].flatten()
-                    c = float(np.percentile(patch, 95) - np.percentile(patch, 5))
-                    contrasts.append(c)
-            mean_contrast = float(np.mean(contrasts)) if contrasts else 0.0
-            # High-contrast block ratio (blocks where P95-P5 > 0.3)
-            hi_contrast_ratio = float(np.mean([1.0 if c > 0.3 else 0.0 for c in contrasts])) if contrasts else 0.0
-            scores["contrast"] = float(min(1.0, (mean_contrast / 0.40) * 0.5 + hi_contrast_ratio * 0.7))
+            # Also compute the max single-block score (worst spot)
+            peak = float(block_scores_arr.max())
 
-            # --- 6. Spatial disorder (edge distribution non-uniformity) ------
-            # Damaged surfaces have edges scattered everywhere, not just along
-            # a few organised lines.  Measure how many grid cells have edges.
-            cell = 24
+            # Blend: 60 % top-K mean + 25 % peak + 15 % global mean
+            global_mean = float(block_scores_arr.mean())
+            region_score = 0.60 * topk_mean + 0.25 * peak + 0.15 * global_mean
+
+            # ═══════════════════════════════════════════════════════════
+            #  GLOBAL SIGNAL 1 — Structural break (dark gap detection)
+            # ═══════════════════════════════════════════════════════════
+            # Look for horizontal/vertical bands of darkness (bridge gap)
+            row_darkness = np.mean(g < 0.20, axis=1)   # fraction of dark pixels per row
+            col_darkness = np.mean(g < 0.20, axis=0)
+            # A structural break → some rows/cols are predominantly dark
+            max_row_dark = float(np.max(row_darkness))
+            max_col_dark = float(np.max(col_darkness))
+            # Count rows/cols that are > 40 % dark
+            dark_row_ratio = float(np.mean(row_darkness > 0.40))
+            dark_col_ratio = float(np.mean(col_darkness > 0.40))
+            break_score = min(1.0, max(max_row_dark, max_col_dark) * 1.5
+                              + (dark_row_ratio + dark_col_ratio) * 2.0)
+
+            # ═══════════════════════════════════════════════════════════
+            #  GLOBAL SIGNAL 2 — Edge spatial spread
+            # ═══════════════════════════════════════════════════════════
+            cell = 28
             cells_with_edges = 0
             total_cells = 0
-            for y in range(0, h - cell + 1, cell):
-                for x in range(0, w - cell + 1, cell):
+            for yy in range(0, h - cell + 1, cell):
+                for xx in range(0, w - cell + 1, cell):
                     total_cells += 1
-                    if float(strong[y:y+cell, x:x+cell].mean()) > 0.04:
+                    if float(strong[yy:yy+cell, xx:xx+cell].mean()) > 0.03:
                         cells_with_edges += 1
-            spread_ratio = cells_with_edges / max(total_cells, 1)
-            scores["disorder"] = float(min(1.0, spread_ratio / 0.55))
+            spread_score = min(1.0, (cells_with_edges / max(total_cells, 1)) / 0.45)
 
-            # ── weighted combination ─────────────────────────────────
-            raw_conf = sum(self.WEIGHTS[k] * scores[k] for k in self.WEIGHTS)
+            # ═══════════════════════════════════════════════════════════
+            #  GLOBAL SIGNAL 3 — Overall edge energy + high-freq content
+            # ═══════════════════════════════════════════════════════════
+            # Laplacian variance (blurriness inverse — sharp/broken = high)
+            lap = grey.filter(ImageFilter.Kernel(
+                size=(3, 3),
+                kernel=[0, 1, 0, 1, -4, 1, 0, 1, 0],
+                scale=1, offset=128
+            ))
+            lap_arr = np.asarray(lap, dtype=np.float32) / 255.0
+            lap_var = float(lap_arr.var())
+            sharpness_score = min(1.0, lap_var / 0.015)
 
-            # ── synergy boost: when multiple signals agree, amplify ──
-            # Count how many signals are individually above 0.5
-            firing = sum(1 for v in scores.values() if v > 0.5)
-            # If 4+ signals fire → strong synergy, 3 → moderate
-            if firing >= 5:
-                synergy = 0.18
-            elif firing >= 4:
-                synergy = 0.12
+            # ═══════════════════════════════════════════════════════════
+            #  FINAL COMBINATION
+            # ═══════════════════════════════════════════════════════════
+            #  70 % region-based + 12 % break + 10 % spread + 8 % sharpness
+            raw_conf = (0.70 * region_score
+                        + 0.12 * break_score
+                        + 0.10 * spread_score
+                        + 0.08 * sharpness_score)
+
+            # Synergy: if region_score AND break_score both high → catastrophic
+            if region_score > 0.5 and break_score > 0.4:
+                raw_conf += 0.15
+            elif region_score > 0.4 and break_score > 0.3:
+                raw_conf += 0.08
+
+            # Count how many scores are individually strong
+            all_scores = {
+                "region": region_score, "break": break_score,
+                "spread": spread_score, "sharpness": sharpness_score,
+            }
+            firing = sum(1 for v in all_scores.values() if v > 0.45)
+            if firing >= 4:
+                raw_conf += 0.10
             elif firing >= 3:
-                synergy = 0.06
-            else:
-                synergy = 0.0
+                raw_conf += 0.05
 
-            confidence = raw_conf + synergy
-            # Power curve: compresses low scores, expands mid-high
-            # x^0.8 when x > 0.25 (push damaged images up),
-            # x*0.6  when x < 0.15 (suppress clean images floor noise)
-            if confidence < 0.15:
-                confidence = confidence * 0.55
+            # Floor suppression for very clean images
+            if raw_conf < 0.18:
+                confidence = raw_conf * 0.35
             else:
-                confidence = confidence ** 0.82
+                confidence = raw_conf ** 0.78   # gentle power curve up
+
             confidence = float(min(1.0, max(0.0, confidence)))
 
-            # Build the heat-map overlay
+            # Heat-map overlay
             overlay_b64 = self._make_overlay(image_bytes, edge_arr, strong)
 
-            # Descriptive note
+            # Note
             if confidence >= 0.75:
                 note = "Severe structural damage detected — immediate inspection recommended."
             elif confidence >= 0.50:
-                note = "Moderate damage indicators — schedule follow-up inspection."
+                note = "Significant damage indicators — schedule urgent inspection."
             elif confidence >= 0.30:
-                note = "Mild surface irregularities detected — monitor periodically."
+                note = "Moderate surface irregularities — monitor closely."
             else:
                 note = "Surface appears mostly intact — no significant damage."
 
-            detail = ", ".join(f"{k}={v:.2f}" for k, v in scores.items())
-            log.info("Vision analysis: conf=%.4f  signals=[%s]", confidence, detail)
+            detail = ", ".join(f"{k}={v:.2f}" for k, v in all_scores.items())
+            log.info("Vision: conf=%.3f  topk=%.2f  peak=%.2f  [%s]",
+                     confidence, topk_mean, peak, detail)
 
             return {
                 "crack_confidence": round(confidence, 4),
@@ -187,6 +207,40 @@ class MultiSignalDamageDetector(BaseCrackDetector):
                 "note": "Pillow not installed — random placeholder confidence.",
                 "overlay_image_base64": None,
             }
+
+    @staticmethod
+    def _score_block(g_block, edge_block, strong_block, colour_block, np) -> float:
+        """Compute a 0-1 damage score for a single image block."""
+        # 1. Edge density
+        edge_density = float(strong_block.mean())
+        ed_score = min(1.0, edge_density / 0.12)
+
+        # 2. Texture roughness
+        tex_std = float(g_block.std())
+        tex_score = min(1.0, tex_std / 0.12)
+
+        # 3. Local contrast (range of intensities)
+        g_flat = g_block.flatten()
+        contrast = float(np.percentile(g_flat, 95) - np.percentile(g_flat, 5))
+        con_score = min(1.0, contrast / 0.45)
+
+        # 4. Dark-gap ratio (proportion of very dark pixels — voids, separations)
+        dark = float((g_block < 0.15).astype(np.float32).mean())
+        dark_score = min(1.0, dark / 0.25)
+
+        # 5. Color anomaly (rust/earth tones, or high channel variance)
+        r, gr, bl = colour_block[:,:,0], colour_block[:,:,1], colour_block[:,:,2]
+        rust = float(((r > gr + 12) & (gr > bl + 4)).astype(np.float32).mean())
+        chan_var = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 80.0)
+        col_score = min(1.0, rust * 4.0 + chan_var * 2.5)
+
+        # Weighted block score
+        score = (0.28 * ed_score
+                 + 0.22 * tex_score
+                 + 0.20 * con_score
+                 + 0.15 * dark_score
+                 + 0.15 * col_score)
+        return float(min(1.0, score))
 
     @staticmethod
     def _make_overlay(
@@ -238,7 +292,7 @@ class MultiSignalDamageDetector(BaseCrackDetector):
 
 
 # Default detector instance (swap this for a real model later)
-detector: BaseCrackDetector = MultiSignalDamageDetector()
+detector: BaseCrackDetector = RegionFocusedDamageDetector()
 
 
 def analyze_image(image_bytes: bytes) -> dict:
