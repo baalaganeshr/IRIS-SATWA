@@ -40,15 +40,16 @@ class MultiSignalDamageDetector(BaseCrackDetector):
 
     # ── tuneable knobs ──────────────────────────────────────────────
     WEIGHTS = {
-        "edge_density": 0.25,
-        "edge_energy":  0.20,
+        "edge_density": 0.22,
+        "edge_energy":  0.18,
         "texture":      0.20,
         "color":        0.15,
-        "contrast":     0.20,
+        "contrast":     0.18,
+        "disorder":     0.07,   # NEW: spatial disorder of edges
     }
     SIZE = (384, 384)          # analysis resolution
-    EDGE_THRESHOLD = 0.08      # pixel considered an edge if > this (0-1)
-    TEXTURE_BLOCK = 16         # block size for local texture stats
+    EDGE_THRESHOLD = 0.06      # lowered — catch finer cracks
+    TEXTURE_BLOCK = 12         # smaller blocks = finer texture detail
     # ────────────────────────────────────────────────────────────────
 
     def analyze(self, image_bytes: bytes) -> dict:
@@ -67,36 +68,41 @@ class MultiSignalDamageDetector(BaseCrackDetector):
             edge_arr = np.asarray(edges, dtype=np.float32) / 255.0
             strong = (edge_arr > self.EDGE_THRESHOLD).astype(np.float32)
             density = float(strong.mean())
-            # Sigmoid-style remapping: 5 % edge pixels ≈ 0.3, 20 % ≈ 0.9
-            scores["edge_density"] = float(min(1.0, 1.0 / (1.0 + np.exp(-18 * (density - 0.12)))))
+            # Aggressive sigmoid: 8 % edges ≈ 0.5, 15 % ≈ 0.9
+            scores["edge_density"] = float(min(1.0, 1.0 / (1.0 + np.exp(-25 * (density - 0.08)))))
 
             # --- 2. Edge energy (variance of edge map) -----------------------
             energy = float(edge_arr.var())
-            # Remap: var 0.01 ≈ calm, var 0.04+ ≈ severe
-            scores["edge_energy"] = float(min(1.0, energy / 0.035))
+            # More sensitive: var 0.008 ≈ calm, var 0.025+ ≈ severe
+            scores["edge_energy"] = float(min(1.0, energy / 0.020))
 
             # --- 3. Texture roughness (mean local std-dev in NxN blocks) -----
             g = np.asarray(grey, dtype=np.float32) / 255.0
             b = self.TEXTURE_BLOCK
             h, w = g.shape
-            local_vars = []
+            local_stds = []
             for y in range(0, h - b + 1, b):
                 for x in range(0, w - b + 1, b):
                     patch = g[y:y+b, x:x+b]
-                    local_vars.append(float(patch.std()))
-            mean_local_std = float(np.mean(local_vars)) if local_vars else 0.0
-            # Remap: std 0.05 ≈ smooth, 0.15+ ≈ very rough / damaged
-            scores["texture"] = float(min(1.0, mean_local_std / 0.13))
+                    local_stds.append(float(patch.std()))
+            mean_local_std = float(np.mean(local_stds)) if local_stds else 0.0
+            # Also measure the proportion of "rough" blocks (std > 0.08)
+            rough_ratio = float(np.mean([1.0 if s > 0.08 else 0.0 for s in local_stds])) if local_stds else 0.0
+            # Combined texture score
+            scores["texture"] = float(min(1.0, (mean_local_std / 0.10) * 0.6 + rough_ratio * 0.6))
 
-            # --- 4. Colour anomaly (saturation spread + brown/rust) ----------
+            # --- 4. Colour anomaly (saturation spread + brown/rust + grey variance) ---
             c_arr = np.asarray(colour, dtype=np.float32)
             r, gr, bl = c_arr[:,:,0], c_arr[:,:,1], c_arr[:,:,2]
             # Channel spread — cracks expose different-coloured material
-            spread = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 128.0)
-            # Rust/earth tone detector: pixels where R > G > B significantly
-            rust_mask = ((r > gr + 15) & (gr > bl + 5)).astype(np.float32)
+            spread = float(np.std([r.mean(), gr.mean(), bl.mean()]) / 100.0)
+            # Rust/earth tone detector: R > G > B
+            rust_mask = ((r > gr + 10) & (gr > bl + 3)).astype(np.float32)
             rust_ratio = float(rust_mask.mean())
-            scores["color"] = float(min(1.0, spread * 2.5 + rust_ratio * 3.0))
+            # Dark region detector (shadow in cracks/gaps): pixels < 60 brightness
+            lum = (0.299 * r + 0.587 * gr + 0.114 * bl)
+            dark_ratio = float((lum < 60).astype(np.float32).mean())
+            scores["color"] = float(min(1.0, spread * 3.0 + rust_ratio * 3.5 + dark_ratio * 2.0))
 
             # --- 5. Contrast ratio (P95 – P5 of luminance in blocks) --------
             contrasts = []
@@ -106,11 +112,48 @@ class MultiSignalDamageDetector(BaseCrackDetector):
                     c = float(np.percentile(patch, 95) - np.percentile(patch, 5))
                     contrasts.append(c)
             mean_contrast = float(np.mean(contrasts)) if contrasts else 0.0
-            # Remap: 0.2 = low contrast, 0.6+ = heavy
-            scores["contrast"] = float(min(1.0, mean_contrast / 0.55))
+            # High-contrast block ratio (blocks where P95-P5 > 0.3)
+            hi_contrast_ratio = float(np.mean([1.0 if c > 0.3 else 0.0 for c in contrasts])) if contrasts else 0.0
+            scores["contrast"] = float(min(1.0, (mean_contrast / 0.40) * 0.5 + hi_contrast_ratio * 0.7))
+
+            # --- 6. Spatial disorder (edge distribution non-uniformity) ------
+            # Damaged surfaces have edges scattered everywhere, not just along
+            # a few organised lines.  Measure how many grid cells have edges.
+            cell = 24
+            cells_with_edges = 0
+            total_cells = 0
+            for y in range(0, h - cell + 1, cell):
+                for x in range(0, w - cell + 1, cell):
+                    total_cells += 1
+                    if float(strong[y:y+cell, x:x+cell].mean()) > 0.04:
+                        cells_with_edges += 1
+            spread_ratio = cells_with_edges / max(total_cells, 1)
+            scores["disorder"] = float(min(1.0, spread_ratio / 0.55))
 
             # ── weighted combination ─────────────────────────────────
-            confidence = sum(self.WEIGHTS[k] * scores[k] for k in self.WEIGHTS)
+            raw_conf = sum(self.WEIGHTS[k] * scores[k] for k in self.WEIGHTS)
+
+            # ── synergy boost: when multiple signals agree, amplify ──
+            # Count how many signals are individually above 0.5
+            firing = sum(1 for v in scores.values() if v > 0.5)
+            # If 4+ signals fire → strong synergy, 3 → moderate
+            if firing >= 5:
+                synergy = 0.18
+            elif firing >= 4:
+                synergy = 0.12
+            elif firing >= 3:
+                synergy = 0.06
+            else:
+                synergy = 0.0
+
+            confidence = raw_conf + synergy
+            # Power curve: compresses low scores, expands mid-high
+            # x^0.8 when x > 0.25 (push damaged images up),
+            # x*0.6  when x < 0.15 (suppress clean images floor noise)
+            if confidence < 0.15:
+                confidence = confidence * 0.55
+            else:
+                confidence = confidence ** 0.82
             confidence = float(min(1.0, max(0.0, confidence)))
 
             # Build the heat-map overlay
